@@ -1,0 +1,4 @@
+# 01. Problem Statement
+
+### Bối cảnh & Vấn đề thực tế
+Tại các sự kiện tập trung đông người như hòa nhạc hay thi đấu thể thao, tình trạng gian lận vé diễn ra phổ biến dưới hình thức một mã vé bị chia sẻ cho nhiều người vào cửa cùng lúc tại các cổng kiểm soát khác nhau. Quy trình soát vé hiện tại tại từng cổng hoạt động độc lập hoặc chỉ ghi nhận trạng thái vé đơn lẻ mà thiếu khả năng đối chiếu dữ liệu tức thì trên toàn bộ các cổng vào. Do đó, kẻ gian dễ dàng lợi dụng độ trễ trong việc cập nhật thông tin giữa các cửa để qua mặt lực lượng an ninh trước khi hành vi vi phạm bị phát hiện. Tình trạng này gây thất thoát doanh thu trực tiếp cho đơn vị tổ chức, làm xáo trộn công tác kiểm soát an ninh trật tự và tước đoạt quyền lợi hợp pháp của những khán giả đã mua vé chính hãng. Vì vậy, việc thiết lập cơ chế giám sát và đối soát tập trung toàn bộ lượt vào cổng ngay tại thời điểm diễn ra là yêu cầu bức thiết để ngăn chặn gian lận ngay tức thì.
