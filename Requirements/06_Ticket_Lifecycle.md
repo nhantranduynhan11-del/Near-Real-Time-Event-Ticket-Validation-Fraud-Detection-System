@@ -1,56 +1,53 @@
 # 06 — Ticket Lifecycle (Phase 1 · 1.2)
 
-
-
 ## Quyết định nghiệp vụ chốt trước
 
-**Vé đã dùng thành công có được dùng để vào lại không? → KHÔNG.** Một khi `ticket_status = USED`, mọi lượt quét sau đó đều trả `scan_result = USED` (khớp F03 — "vé đã qua cổng nhưng được quét lại") và sinh fraud alert `DUPLICATE_SCAN` (07), nhưng **không** tạo transition mới cho `ticket_status` — vé vẫn nằm ở USED.
+**Vé đã dùng thành công có được dùng để vào lại không? → KHÔNG.** Hệ thống áp dụng chính sách single-entry: mỗi vé chỉ được ghi nhận vào hợp lệ một lần (khớp F03 — "vé đã qua cổng nhưng được quét lại" là định nghĩa gian lận). Bất kỳ lượt quét nào sau lần vào hợp lệ đầu tiên đều bị xử lý theo nhánh gian lận, chuyển ticket sang `FLAGGED_FRAUD`, không quay lại trạng thái đã vào hợp lệ.
 
-## Danh sách trạng thái 
+## Danh sách trạng thái
 
 | Trạng thái | Ý nghĩa |
 |---|---|
-| **VALID** | Vé hợp lệ, chưa từng được quét thành công lần nào  |
-| **USED** | Vé đã được quét hợp lệ và cho vào, tại một gate, một thời điểm xác định |
-| **CANCELLED** | Vé bị Event Supervisor thu hồi qua chức năng quản trị  |
+| **UNUSED** | Vé hợp lệ, chưa từng được quét thành công lần nào |
+| **VALID_ENTRY** | Vé đã được quét hợp lệ và cho vào, tại một gate, một thời điểm xác định |
+| **FLAGGED_FRAUD** | Có lượt quét thứ hai (hoặc hơn) cho cùng vé sau khi đã ở `VALID_ENTRY`, được xác nhận là gian lận |
+| **EXPIRED** | Vé còn ở `UNUSED` nhưng sự kiện đã kết thúc mà chưa từng được quét |
+| **CANCELLED** | Vé bị Event Supervisor thu hồi qua chức năng quản trị (F08/UC04) |
 
-**Trạng thái đầu:** `VALID` — mọi vé nhập vào hệ thống (qua UC06, nếu giữ) đều bắt đầu ở đây.
+**Trạng thái đầu:** `UNUSED` — mọi vé nhập vào hệ thống (qua UC06, nếu giữ) đều bắt đầu ở đây.
 
-**Trạng thái cuối:** `USED` và `CANCELLED` là final — không có transition đi tiếp. `VALID` **không** tự động chuyển sang trạng thái khác chỉ vì sự kiện kết thúc .
+**Trạng thái cuối:** `VALID_ENTRY`, `FLAGGED_FRAUD`, `EXPIRED`, `CANCELLED` — không có transition đi tiếp trong phạm vi hệ thống này.
 
 ## Bảng transition
 
-| Từ | Đến | Hành động gây ra | Điều kiện | scan_result tương ứng |
-|---|---|---|---|---|
-| `VALID` | `USED` | Gate Operator quét vé (UC01) | Lượt quét đầu tiên, không CANCELLED, còn trong giờ nhận khách, đúng cổng | `VALID` |
-| `VALID` | `CANCELLED` | Event Supervisor thu hồi vé (UC04) | Thao tác quản trị chủ động, có thể xảy ra bất kỳ lúc nào trước khi vé được dùng | *(không qua UC01, đổi trực tiếp)* |
-
-
+| Từ | Đến | Hành động gây ra | Điều kiện |
+|---|---|---|---|
+| `UNUSED` | `VALID_ENTRY` | Gate Operator quét vé (UC01) | Lượt quét đầu tiên, không CANCELLED, còn trong giờ nhận khách, đúng cổng |
+| `UNUSED` | `EXPIRED` | Hệ thống tự động đóng sự kiện | Sự kiện đã kết thúc, vé chưa từng được quét thành công |
+| `UNUSED` | `CANCELLED` | Event Supervisor thu hồi vé (UC04) | Thao tác quản trị chủ động, trước khi vé được dùng |
+| `VALID_ENTRY` | `FLAGGED_FRAUD` | Gate Operator quét lại cùng vé (UC01 → UC02) | Có lượt quét mới cho cùng vé sau khi đã `VALID_ENTRY`, fraud rule xác nhận điều kiện gian lận thỏa |
 
 ## Transition KHÔNG được phép
 
-- **USED → VALID**: vé đã vào hợp lệ không được đưa trở lại trạng thái chưa dùng.
-- **USED → CANCELLED**: vé đã vào cổng rồi thì không còn thu hồi được nữa trong phạm vi hệ thống này (nếu nhóm cần nghiệp vụ hoàn vé sau khi đã vào cổng thì phải bổ sung riêng, hiện chưa có).
-- **CANCELLED → VALID** hoặc **CANCELLED → USED**: vé đã hủy không được kích hoạt lại; mọi lượt quét vào vé đã CANCELLED chỉ trả `scan_result = CANCELLED` (alert `REVOKED_TICKET`), không đổi status.
-- **Không có trạng thái EXPIRED hay FLAGGED_FRAUD riêng** trong `ticket_status` — hai khái niệm này chỉ tồn tại ở tầng `scan_result`, xem bảng phân biệt ở đầu file.
+- **VALID_ENTRY → UNUSED**: vé đã vào hợp lệ không được đưa trở lại trạng thái chưa dùng.
+- **VALID_ENTRY → VALID_ENTRY (lặp lại)**: không có "vào lần hai hợp lệ"; mọi lượt quét sau lần đầu đều dẫn tới `FLAGGED_FRAUD`.
+- **FLAGGED_FRAUD → bất kỳ trạng thái nào khác**: một khi đã bị đánh dấu gian lận, ticket không quay lại được trạng thái hợp lệ trong phạm vi hệ thống này.
+- **EXPIRED → VALID_ENTRY** hoặc **CANCELLED → VALID_ENTRY**: vé đã hết hiệu lực hoặc đã bị hủy thì không thể quét vào được nữa.
 
 ## Sơ đồ trạng thái (mô tả dạng text)
 
 ```
-┌─────────┐   Gate Operator quét, scan_result = VALID   ┌────────┐
-│  VALID  ├───────────────────────────────────────────────►│  USED  │ (final)
-└────┬────┘                                                 └────────┘
-     │
-     │ Event Supervisor thu hồi (F08 / UC04)
-     ▼
-┌────────────┐
-│ CANCELLED  │ (final)
-└────────────┘
+                 ┌───────────┐
+        ┌───────►│  EXPIRED  │ (final)
+        │        └───────────┘
+        │
+┌───────────┐   Gate Operator quét, scan_result = VALID  ┌──────────────┐
+│  UNUSED   ├─────────────────────────────────────────────►│ VALID_ENTRY  │ (final)
+└─────┬─────┘                                              └──────┬───────┘
+      │                                                           │
+      │ Event Supervisor thu hồi (UC04)                           │ quét lại, scan_result = USED + fraud rule thỏa
+      ▼                                                           ▼
+┌───────────┐                                            ┌────────────────┐
+│ CANCELLED │ (final)                                     │ FLAGGED_FRAUD  │ (final)
+└───────────┘                                             └────────────────┘
 ```
-
-Quét lặp lại lên vé đã ở `USED` hoặc `CANCELLED` → không có mũi tên mới, chỉ sinh `scan_result` + fraud alert tương ứng (07), vòng lặp tại chỗ.
-
-
-
-
-
