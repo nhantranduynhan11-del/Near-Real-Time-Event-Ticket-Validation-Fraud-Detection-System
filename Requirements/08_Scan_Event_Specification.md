@@ -30,11 +30,12 @@ Kế thừa toàn bộ 9 field ở trên, cộng thêm:
 | `previous_scan_event_id` | string (UUID) | Điều kiện | `event_id` của lần quét hợp lệ trước đó. Bắt buộc nếu `is_duplicate = true` | Processing |
 | `previous_scan_gate_id` | string | Điều kiện | Cổng của lần quét hợp lệ trước đó. Bắt buộc nếu `is_duplicate = true` | Processing |
 | `time_since_previous_scan_ms` | integer (ms) | Điều kiện | Khoảng cách thời gian với lần quét hợp lệ trước, tính theo **`received_at`** (server clock), không dùng `scanned_at`. ≥ 0, bắt buộc nếu `is_duplicate = true` | Processing |
+| `min_travel_time_ms` | integer (ms) hoặc null | Điều kiện | Thời gian đi bộ tối thiểu giữa `previous_scan_gate_id` và `gate_id`, tra từ bảng thời gian đi bộ giữa hai cổng của sự kiện. Bắt buộc khi `is_duplicate = true` và hai cổng khác nhau; null khi cùng cổng hoặc khi không tra được. Dùng làm ngưỡng cho quy tắc R4 ở `09_Fraud_Rules.md` | Processing (tra bảng cấu hình cổng) |
 | `ticket_assigned_gate_id` | string hoặc null | Điều kiện | Cổng được phép vào của vé (null nếu vé không giới hạn cổng), dùng để đối chiếu với `gate_id` ở Bronze | Processing (tra ticket master data) |
 | `is_wrong_gate` | boolean | Bắt buộc | Vé bị quét sai cổng so với `ticket_assigned_gate_id` không. true khi `scan_result = WRONG_GATE`, bất kể sau đó alert ở mức WARNING hay FRAUD | Processing |
 | `distinct_wrong_gate_count` | integer | Điều kiện | Số cổng **khác nhau** mà vé này từng bị `WRONG_GATE`, tính lũy kế tới lần quét hiện tại (quét sai lặp lại cùng 1 cổng không cộng thêm). Tối đa bằng `N − 1` với `N` là tổng số cổng, vì quét đúng cổng không sinh `WRONG_GATE`. Bắt buộc khi `scan_result = WRONG_GATE` | Processing |
 | `alert_level` | enum (`NONE`/`WARNING`/`FRAUD`) | Bắt buộc | Mức cảnh báo của lần scan này, theo bảng ánh xạ ở `07_Scan_Results.md`. `INVALID`/`USED`/`CANCELLED` luôn `FRAUD`; `VALID`/`EXPIRED` luôn `NONE`; `WRONG_GATE` là `WARNING` hoặc `FRAUD` tuỳ `distinct_wrong_gate_count` | Processing |
-| `alert_code` | enum (`INVALID_QR`/`DUPLICATE_SCAN`/`REVOKED_TICKET`/`WRONG_GATE_WARNING`/`WRONG_GATE_FRAUD`) hoặc null | Điều kiện | Mã cảnh báo cụ thể. Bắt buộc khi `alert_level ≠ NONE`, null khi `alert_level = NONE` | Processing |
+| `alert_code` | enum (`INVALID_QR`/`DUPLICATE_SCAN`/`IMPOSSIBLE_TRAVEL`/`REVOKED_TICKET`/`WRONG_GATE_WARNING`/`WRONG_GATE_FRAUD`) hoặc null | Điều kiện | Mã cảnh báo cụ thể. Bắt buộc khi `alert_level ≠ NONE`, null khi `alert_level = NONE`. Với `scan_result = USED`, mã là `IMPOSSIBLE_TRAVEL` khi thỏa quy tắc R4, ngược lại là `DUPLICATE_SCAN` — xem `09_Fraud_Rules.md` | Processing |
 | `fraud_alert` | boolean | Bắt buộc | Tiện ích cho dashboard: `true` khi `alert_level = FRAUD`, `false` khi `NONE` hoặc `WARNING`. Chỉ để lọc nhanh tỉ lệ gian lận thật (loại `WARNING` ra khỏi con số này) | Processing (derived từ `alert_level`) |
 | `ingestion_lag_ms` | integer (ms) | Tùy chọn | Độ trễ giữa `received_at` và `processing_ts`, để theo dõi pipeline chứ không phải dữ liệu nghiệp vụ. ≥ 0 | Processing |
 
@@ -56,7 +57,7 @@ so `received_at` với giờ nhận khách. Hai field này vì vậy **không ph
 - **API** bổ sung: `event_id`, `received_at`
 - **Processing** bổ sung: `processing_ts`, `ticket_status_before`, `ticket_status_after`,
   `scan_result`, `is_duplicate`, `previous_scan_event_id`, `previous_scan_gate_id`,
-  `time_since_previous_scan_ms`, `ticket_assigned_gate_id`, `is_wrong_gate`,
+  `time_since_previous_scan_ms`, `min_travel_time_ms`, `ticket_assigned_gate_id`, `is_wrong_gate`,
   `distinct_wrong_gate_count`, `alert_level`, `alert_code`, `fraud_alert`, `ingestion_lag_ms`
 
 Nguyên tắc: client chỉ gửi thứ nó thực sự quan sát được. Mọi kết luận nghiệp vụ — kết quả xác thực,
