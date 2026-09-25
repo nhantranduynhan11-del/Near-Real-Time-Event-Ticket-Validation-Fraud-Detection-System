@@ -8,11 +8,18 @@ Các tài liệu khác (04, 05, 08, 09) tham chiếu tới đây, không viết 
 | Scan Result | Ý nghĩa | Điều kiện | Alert Level | Entry |
 |---|---|---|---|---|
 | `VALID` | Vé hợp lệ, cho vào | `ticket_status = UNUSED`, còn trong giờ nhận khách, đúng cổng | NONE | Cho vào |
-| `INVALID` | Vé giả / QR lỗi | Không tìm được `ticket_id` trong DB, hoặc `decode_error = true` | FRAUD (`INVALID_QR`) | Không cho vào |
-| `USED` | Vé đã có entry hợp lệ, giờ bị quét lại | `ticket_status = VALID_ENTRY` hoặc `FLAGGED_FRAUD` | FRAUD (`DUPLICATE_SCAN`) | Không cho vào |
+| `INVALID` | Vé giả, QR lỗi, hoặc vé của sự kiện khác | `decode_error = true`, hoặc không tìm được `ticket_id` trong DB, hoặc vé tồn tại nhưng `event_id` của vé khác sự kiện đang mở cổng | FRAUD (`INVALID_QR`) | Không cho vào |
+| `USED` | Vé đã có entry hợp lệ, giờ bị quét lại | `ticket_status = VALID_ENTRY` hoặc `FLAGGED_FRAUD` | FRAUD (`DUPLICATE_SCAN` hoặc `IMPOSSIBLE_TRAVEL` — xem `09_Fraud_Rules.md`) | Không cho vào |
 | `CANCELLED` | Vé đã hủy/hoàn tiền nhưng vẫn bị đem quét | `ticket_status = CANCELLED` | FRAUD (`REVOKED_TICKET`) | Không cho vào |
 | `EXPIRED` | Vé chưa dùng nhưng đã hết giờ nhận khách | `ticket_status = EXPIRED`, **hoặc** `ticket_status = UNUSED` và `received_at` nằm ngoài giờ nhận khách | NONE | Không cho vào |
 | `WRONG_GATE` | Vào nhầm cổng | `ticket_status = UNUSED`, còn trong giờ nhận khách, `gate_id ≠ ticket_assigned_gate_id` | WARNING hoặc FRAUD — xem mục riêng bên dưới | Không cho vào |
+
+### Vì sao vé của sự kiện khác cũng cho ra `INVALID`
+
+Vé thật nhưng thuộc sự kiện khác vẫn là vé không dùng được cho sự kiện đang diễn ra, và ở cổng thì
+nhân viên không phân biệt được nó với vé giả. Nhóm đã cân nhắc tách thành một kết quả riêng nhưng
+bản demo chỉ chạy một sự kiện nên không tách. Nếu sau này hệ thống phục vụ nhiều sự kiện cùng lúc
+thì nên tách để thống kê rõ hơn.
 
 ### Vì sao `EXPIRED` có hai điều kiện
 
@@ -30,7 +37,9 @@ Hai điều kiện này cho cùng một kết quả `EXPIRED`, chỉ khác ở c
 Xử lý tuần tự, **dừng ở bước đầu tiên khớp điều kiện**:
 
 ```
-1. decode_error = true, hoặc ticket_id không tồn tại trong DB
+1. decode_error = true,
+   hoặc ticket_id không tồn tại trong DB,
+   hoặc vé tồn tại nhưng thuộc sự kiện khác
    → INVALID
 
 2. ticket_status = CANCELLED
