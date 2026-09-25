@@ -38,8 +38,9 @@ chứ không viết lại.
   Từ `VALID_ENTRY`, `ticket_status` chuyển sang `FLAGGED_FRAUD`.
   Từ `FLAGGED_FRAUD`, `ticket_status` giữ nguyên `FLAGGED_FRAUD` (self-transition, xem 06).
   Cả hai trường hợp đều sinh cảnh báo `DUPLICATE_SCAN` qua UC02.
-- **`INVALID`** — QR không giải mã được (`decode_error = true`) hoặc `ticket_id` không tồn tại
-  trong DB. Không có `ticket_status` để đổi. Sinh cảnh báo `INVALID_QR` qua UC02.
+- **`INVALID`** — QR không giải mã được (`decode_error = true`), `ticket_id` không tồn tại trong DB,
+  hoặc vé tồn tại nhưng thuộc sự kiện khác. `ticket_status` không đổi. Sinh cảnh báo `INVALID_QR`
+  qua UC02.
 - **`CANCELLED`** — vé đã bị thu hồi. `ticket_status` giữ nguyên `CANCELLED`.
   Sinh cảnh báo `REVOKED_TICKET` qua UC02.
 - **`WRONG_GATE`** — vé còn `UNUSED`, còn trong giờ nhận khách, nhưng `gate_id` không khớp
@@ -82,13 +83,15 @@ Mọi kết quả còn lại — gồm cả `USED` trên vé đã ở `FLAGGED_F
    | Scan result | Alert level | Alert code |
    |---|---|---|
    | `INVALID` | FRAUD | `INVALID_QR` |
-   | `USED` | FRAUD | `DUPLICATE_SCAN` |
+   | `USED`, hai cổng khác nhau và nhanh hơn thời gian đi bộ tối thiểu | FRAUD | `IMPOSSIBLE_TRAVEL` |
+   | `USED`, các trường hợp còn lại | FRAUD | `DUPLICATE_SCAN` |
    | `CANCELLED` | FRAUD | `REVOKED_TICKET` |
    | `WRONG_GATE`, `distinct_wrong_gate_count < N − 1` | WARNING | `WRONG_GATE_WARNING` |
    | `WRONG_GATE`, `distinct_wrong_gate_count = N − 1` | FRAUD | `WRONG_GATE_FRAUD` |
    | `VALID`, `EXPIRED` | NONE | không sinh cảnh báo |
 
-   `N` là tổng số cổng của sự kiện.
+   `N` là tổng số cổng của sự kiện. Điều kiện phân biệt `IMPOSSIBLE_TRAVEL` với `DUPLICATE_SCAN`
+   nằm ở quy tắc R4 trong `09_Fraud_Rules.md`.
 
 3. Hệ thống bắn cảnh báo lên dashboard gần như ngay lập tức, kèm `ticket_id`, `gate_id`,
    `alert_level`, `alert_code`; với `USED` kèm thêm thông tin đối chiếu lượt quét trước
