@@ -21,7 +21,7 @@ chứ không viết lại.
 
 1. Gate Operator quét mã QR trên vé của khách tại gate được phân công.
 2. Hệ thống tiếp nhận lượt soát vé: `raw_qr_payload`, `gate_id`, `scanner_id`, `scanned_at` (F01);
-   API bổ sung `event_id` và `received_at`.
+   API bổ sung `scan_event_id` và `received_at`.
 3. Hệ thống giải mã QR thành `ticket_id`.
 4. Hệ thống tra `ticket_status` hiện tại và xác định `scan_result` bằng cách áp dụng
    **thứ tự ưu tiên định nghĩa tại `07_Scan_Results.md`**, dừng ở bước đầu tiên khớp điều kiện.
@@ -39,7 +39,7 @@ chứ không viết lại.
   Từ `FLAGGED_FRAUD`, `ticket_status` giữ nguyên `FLAGGED_FRAUD` (self-transition, xem 06).
   Cả hai trường hợp đều sinh cảnh báo `DUPLICATE_SCAN` qua UC02.
 - **`INVALID`** — QR không giải mã được (`decode_error = true`), `ticket_id` không tồn tại trong DB,
-  hoặc vé tồn tại nhưng thuộc sự kiện khác. `ticket_status` không đổi. Sinh cảnh báo `INVALID_QR`
+  hoặc vé tồn tại nhưng thuộc sự kiện khác với sự kiện đang chạy (`ACTIVE_EVENT_ID`). `ticket_status` không đổi. Sinh cảnh báo `INVALID_QR`
   qua UC02.
 - **`CANCELLED`** — vé đã bị thu hồi. `ticket_status` giữ nguyên `CANCELLED`.
   Sinh cảnh báo `REVOKED_TICKET` qua UC02.
