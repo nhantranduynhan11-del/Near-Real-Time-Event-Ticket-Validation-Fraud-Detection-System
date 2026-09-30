@@ -8,7 +8,7 @@ Các tài liệu khác (04, 05, 08, 09) tham chiếu tới đây, không viết 
 | Scan Result | Ý nghĩa | Điều kiện | Alert Level | Entry |
 |---|---|---|---|---|
 | `VALID` | Vé hợp lệ, cho vào | `ticket_status = UNUSED`, còn trong giờ nhận khách, đúng cổng | NONE | Cho vào |
-| `INVALID` | Vé giả, QR lỗi, hoặc vé của sự kiện khác | `decode_error = true`, hoặc không tìm được `ticket_id` trong DB, hoặc vé tồn tại nhưng `event_id` của vé khác sự kiện đang mở cổng | FRAUD (`INVALID_QR`) | Không cho vào |
+| `INVALID` | Vé giả, QR lỗi, hoặc vé của sự kiện khác | `decode_error = true`, hoặc không tìm được `ticket_id` trong DB, hoặc vé tồn tại nhưng `event_id` của vé khác sự kiện đang chạy (`ACTIVE_EVENT_ID`) | FRAUD (`INVALID_QR`) | Không cho vào |
 | `USED` | Vé đã có entry hợp lệ, giờ bị quét lại | `ticket_status = VALID_ENTRY` hoặc `FLAGGED_FRAUD` | FRAUD (`DUPLICATE_SCAN` hoặc `IMPOSSIBLE_TRAVEL` — xem `09_Fraud_Rules.md`) | Không cho vào |
 | `CANCELLED` | Vé đã hủy/hoàn tiền nhưng vẫn bị đem quét | `ticket_status = CANCELLED` | FRAUD (`REVOKED_TICKET`) | Không cho vào |
 | `EXPIRED` | Vé chưa dùng nhưng đã hết giờ nhận khách | `ticket_status = EXPIRED`, **hoặc** `ticket_status = UNUSED` và `received_at` nằm ngoài giờ nhận khách | NONE | Không cho vào |
@@ -18,7 +18,7 @@ Các tài liệu khác (04, 05, 08, 09) tham chiếu tới đây, không viết 
 
 Vé thật nhưng thuộc sự kiện khác vẫn là vé không dùng được cho sự kiện đang diễn ra, và ở cổng thì
 nhân viên không phân biệt được nó với vé giả. Nhóm đã cân nhắc tách thành một kết quả riêng nhưng
-bản demo chỉ chạy một sự kiện nên không tách. Nếu sau này hệ thống phục vụ nhiều sự kiện cùng lúc
+mỗi lần chạy hệ thống chỉ phục vụ một sự kiện (khai bằng biến môi trường `ACTIVE_EVENT_ID`) nên không tách. Nếu sau này hệ thống phục vụ nhiều sự kiện cùng lúc
 thì nên tách để thống kê rõ hơn.
 
 ### Vì sao `EXPIRED` có hai điều kiện
@@ -39,7 +39,7 @@ Xử lý tuần tự, **dừng ở bước đầu tiên khớp điều kiện**:
 ```
 1. decode_error = true,
    hoặc ticket_id không tồn tại trong DB,
-   hoặc vé tồn tại nhưng thuộc sự kiện khác
+   hoặc vé tồn tại nhưng event_id của vé ≠ ACTIVE_EVENT_ID
    → INVALID
 
 2. ticket_status = CANCELLED
