@@ -93,7 +93,7 @@ Tám ca dưới đây dùng đúng bộ dữ liệu này. Bộ dữ liệu phả
 | | |
 |---|---|
 | **Quy tắc kiểm tra** | R1 — Vé không dùng được cho sự kiện này |
-| **Điều kiện ban đầu** | Sự kiện đang mở cổng là `EV001`. Vé `TK005` tồn tại trong cơ sở dữ liệu, thuộc `EV002`, trạng thái `UNUSED`. |
+| **Điều kiện ban đầu** | Hệ thống đang chạy cho sự kiện `EV001` (`ACTIVE_EVENT_ID=EV001`). Vé `TK005` tồn tại trong cơ sở dữ liệu, thuộc `EV002`, trạng thái `UNUSED`. |
 
 **Các bước**
 
