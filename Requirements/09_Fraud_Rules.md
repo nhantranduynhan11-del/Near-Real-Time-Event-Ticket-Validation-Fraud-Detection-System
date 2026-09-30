@@ -49,10 +49,10 @@ vé, chỉ đánh dấu để người giám sát chú ý. Phần mô tả đầ
 
 1. Máy quét không đọc được mã QR thành mã vé (`decode_error = true`).
 2. Đọc được mã vé, nhưng mã đó không có trong cơ sở dữ liệu.
-3. Mã vé có trong cơ sở dữ liệu, nhưng thuộc **một sự kiện khác** với sự kiện đang diễn ra.
+3. Mã vé có trong cơ sở dữ liệu, nhưng thuộc **một sự kiện khác** với sự kiện đang chạy. Mỗi lần chạy, hệ thống chỉ phục vụ một sự kiện, khai bằng biến môi trường `ACTIVE_EVENT_ID`.
 
-**Dữ liệu cần.** `decode_error`, `ticket_id`, và trường `event_id` của vé trong bảng vé để so với sự
-kiện đang mở cổng.
+**Dữ liệu cần.** `decode_error`, `ticket_id`, và trường `event_id` của vé trong bảng vé để so với
+`ACTIVE_EVENT_ID`.
 
 **Kết quả.** Kết quả scan là `INVALID`. Không cho vào. Sinh cảnh báo `INVALID_QR` ở mức gian lận.
 Không có trạng thái vé nào bị thay đổi.
@@ -102,7 +102,7 @@ ai đó đang dùng bản sao của vé, hoặc chính người đó đã ra r�
 theo chính sách đã chốt.
 
 **Lưu ý về máy quét bấm nhầm hai lần.** Trường hợp cùng một máy quét gửi hai lần cho cùng một thao
-tác đã được loại từ trước, bằng cách mỗi lần gọi mang một `event_id` riêng và bước xử lý loại bỏ bản
+tác đã được loại từ trước, bằng cách mỗi lần gọi mang một `scan_event_id` riêng và bước xử lý loại bỏ bản
 ghi trùng. R3 chỉ nói về hai thao tác quét thật sự khác nhau.
 
 ---
