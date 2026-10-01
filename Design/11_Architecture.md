@@ -255,12 +255,20 @@ KAFKA_TOPIC=scan-events
 KAFKA_DLQ_TOPIC=scan-events-dlq
 
 API_PORT=3000
+TZ=Asia/Ho_Chi_Minh
 ACTIVE_EVENT_ID=EV001
 QR_HMAC_SECRET=
 FRAUD_CONFIG_PATH=./config/fraud-rules.json
 ```
 
 Quy luật: trong Docker gọi bằng tên service, ngoài Docker gọi bằng `localhost`.
+
+**Múi giờ.** Mọi mốc thời gian trong hệ thống là giờ Việt Nam (UTC+7). Docker, Node.js và Spark mặc định chạy theo UTC, nên cả ba phải ghim múi giờ, nếu không mọi phép so giờ sẽ lệch 7 tiếng:
+
+- Docker: biến `TZ=Asia/Ho_Chi_Minh` trong `.env`, truyền vào mọi container.
+- API (Node.js): chạy với `TZ=Asia/Ho_Chi_Minh`. Khi sinh `received_at` không dùng `toISOString()` (luôn trả giờ UTC), mà định dạng theo giờ địa phương.
+- Spark: `spark.sql.session.timeZone=Asia/Ho_Chi_Minh`.
+- SQL Server: giá trị mặc định dùng `DATEADD(HOUR, 7, SYSUTCDATETIME())`, không dùng `SYSDATETIME()`.
 
 `ACTIVE_EVENT_ID` là sự kiện mà lần chạy này phục vụ. Cơ sở dữ liệu có thể chứa nhiều sự kiện, nhưng API và Spark chỉ xử lý vé của sự kiện này, vé của sự kiện khác cho kết quả `INVALID`. Đổi sự kiện thì sửa biến rồi khởi động lại API và Spark.
 
