@@ -64,8 +64,8 @@ Tám ca dưới đây dùng đúng bộ dữ liệu này. Bộ dữ liệu phả
 
 **Quy ước chung**
 
-- Mọi mốc giờ đều thuộc cùng một ngày và cùng một múi giờ, viết cho dễ đọc. Hệ thống lưu theo giờ
-  chuẩn quốc tế.
+- Mọi mốc giờ đều thuộc cùng một ngày (ngày demo 12/12/2026) và là giờ Việt Nam (UTC+7), đúng như
+  hệ thống lưu trong cơ sở dữ liệu.
 - Mốc giờ trong cột đầu vào là `received_at` — giờ máy chủ nhận được lượt quét, theo quy định ở
   `09_Fraud_Rules.md`.
 - **Trước mỗi ca, nạp lại dữ liệu mẫu về trạng thái ban đầu.** Các ca không nối tiếp nhau.
