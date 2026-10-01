@@ -36,7 +36,7 @@ flowchart TD
     P[Ticketing Partner / Event Supervisor<br>nạp danh sách vé - F09] --> P2[(Ticket DB<br>ticket_status = UNUSED)]
 
     A[Khán giả xuất trình vé tại cổng] --> B[Gate Operator quét mã QR]
-    B -->|raw_qr_payload, gate_id,<br>scanner_id, scanned_at| C[API tiếp nhận<br>bổ sung event_id, received_at - F01]
+    B -->|raw_qr_payload, gate_id,<br>scanner_id, scanned_at| C[API tiếp nhận<br>bổ sung scan_event_id, received_at - F01]
 
     C --> D[(Bronze<br>Raw scan events - F06)]
     C --> E[Xác định scan_result<br>theo thứ tự ưu tiên tại 07_Scan_Results.md<br>F02 + F03]
@@ -84,7 +84,7 @@ xem bảng ánh xạ ở cuối `06_Ticket_Lifecycle.md`.
    * **Khởi tạo dữ liệu (Pre-event):** danh sách vé được nạp qua `F09 / UC06` trước khi sự kiện mở
      cửa, khởi tạo trạng thái ban đầu là `UNUSED`.
    * **Điểm đầu (Input):** thao tác quét vé của `Gate Operator`, phát sinh scan event chứa
-     `raw_qr_payload`, `gate_id`, `scanner_id`, `scanned_at`, được API bổ sung `event_id` và
+     `raw_qr_payload`, `gate_id`, `scanner_id`, `scanned_at`, được API bổ sung `scan_event_id` và
      `received_at`.
    * **Xử lý trung gian (Processing & Logic):** ghi log kiểm toán xuống Bronze (`F06`), xác thực vé
      (`F02`) và phát hiện gian lận (`F03`) theo thứ tự ưu tiên tại `07_Scan_Results.md`.
