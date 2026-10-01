@@ -27,7 +27,7 @@ Mỗi sự kiện có một mã sự kiện duy nhất để phân biệt với 
 
 Vì cổng là cổng thật của địa điểm nên một sự kiện mở nhiều cổng, và một cổng được dùng cho nhiều sự kiện khác nhau. Mỗi sự kiện phải mở ít nhất một cổng. Số cổng mở cho một sự kiện không lưu riêng mà được đếm từ các cổng sự kiện đó sử dụng, và con số này được dùng để quyết định khi nào một vé đi sai cổng quá nhiều lần bị xem là gian lận.
 
-Giữa hai cổng bất kỳ của địa điểm, ban tổ chức ghi lại thời gian đi bộ ngắn nhất từ cổng này sang cổng kia, tính bằng giây và lấy theo người đi nhanh nhất. Vì cổng cố định nên con số này đo một lần và dùng chung cho mọi sự kiện. Thời gian này thuộc về cặp cổng chứ không thuộc về riêng cổng nào, và giống nhau theo cả hai chiều, nghĩa là từ cổng A sang cổng D mất bao lâu thì từ D về A cũng mất bấy nhiêu. Một cổng không có thời gian đi bộ với chính nó.
+Giữa hai cổng bất kỳ của địa điểm, ban tổ chức ghi lại thời gian đi bộ ngắn nhất từ cổng này sang cổng kia, lấy theo người đi nhanh nhất. Vì cổng cố định nên con số này đo một lần và dùng chung cho mọi sự kiện. Thời gian này thuộc về cặp cổng chứ không thuộc về riêng cổng nào, và giống nhau theo cả hai chiều, nghĩa là từ cổng A sang cổng D mất bao lâu thì từ D về A cũng mất bấy nhiêu. Một cổng không có thời gian đi bộ với chính nó.
 
 Mỗi cổng có một hoặc nhiều máy quét, mỗi máy quét đặt tại đúng một cổng. Máy quét có mã máy quét duy nhất trong toàn hệ thống.
 
@@ -75,7 +75,7 @@ Các kiểu thực thể mạnh gồm sự kiện, cổng, máy quét, vé, ngư
 
 ## 3. Lược đồ quan hệ
 
-Kết quả ánh xạ EERD theo các bước của Elmasri: 9 quan hệ. Quy ước: <ins>gạch dưới</ins> là khóa chính, *in nghiêng* là khóa ngoại. Kiểu dữ liệu và giá trị mặc định xem mục 5.
+Kết quả ánh xạ EERD theo các bước của Elmasri: 9 quan hệ. Quy ước: <ins>gạch dưới</ins> là khóa chính, *in nghiêng* là khóa ngoại. Kiểu dữ liệu và giá trị mặc định xem mục 4.
 
 ![Lược đồ quan hệ](images/Relational_Schema.svg)
 
@@ -121,7 +121,7 @@ NULL được phép: ticket_id, operator_id, previous_scan_event_id và các tr�
 CHECK: scan_result IN ('VALID', 'INVALID', 'USED', 'CANCELLED', 'EXPIRED', 'WRONG_GATE'); alert_level IN ('NONE', 'WARNING', 'FRAUD'); alert_code IS NULL hoặc thuộc sáu mã cảnh báo  
 CHECK: processing_ts >= received_at; previous_scan_event_id <> scan_event_id; decode_error = 1 thì ticket_id IS NULL  
 CHECK: alert_code khớp alert_level; scan_result khớp alert_code (bảng ánh xạ file 07)  
-Ghi chú: is_wrong_gate, is_duplicate, fraud_alert, ingestion_lag_ms là cột tính toán (mục 5.8)
+Ghi chú: is_wrong_gate, is_duplicate, fraud_alert, ingestion_lag_ms là cột tính toán (mục 4.8)
 
 **FRAUD_ALERT** (<ins>*scan_event_id*</ins>, alert_code, alert_level, created_at)  — thực thể yếu  
 Foreign key: scan_event_id *to* SCAN_EVENT.scan_event_id (liên kết định danh GENERATES, 1:1)  
@@ -211,7 +211,7 @@ Khóa và khóa ngoại:
 | Cột | Kiểu | NULL | Mặc định | Ràng buộc, ghi chú |
 |---|---|---|---|---|
 | scan_event_id | UNIQUEIDENTIFIER | Không | | PK_scan_event. Chống ghi trùng khi Spark đọc lại cùng một bản tin từ Kafka |
-| ticket_id | NVARCHAR(20) | Có | | FK_scan_event_ticket → TICKET. NULL khi QR hỏng **hoặc mã vé không có trong DB** (quyết định 5, mục 1) |
+| ticket_id | NVARCHAR(20) | Có | | FK_scan_event_ticket → TICKET. NULL khi QR hỏng **hoặc mã vé không có trong DB**; mã gốc vẫn nằm trong `raw_qr_payload` và tầng Bronze |
 | gate_id | NVARCHAR(20) | Không | | FK_scan_event_gate → GATE |
 | scanner_id | NVARCHAR(20) | Không | | FK_scan_event_scanner: (scanner_id, gate_id) → SCANNER |
 | operator_id | NVARCHAR(20) | Có | | FK_scan_event_user → APP_USER. NULL khi máy quét không yêu cầu đăng nhập |
