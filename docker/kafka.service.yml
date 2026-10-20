@@ -1,0 +1,84 @@
+services:
+  kafka:
+    # Ghim phiên bản cụ thể, không dùng :latest để cả nhóm chạy cùng một bản
+    image: apache/kafka:4.1.2
+    container_name: kafka
+    hostname: kafka
+    #Kafka chỉ bật ở chế độ chạy chế độ xử lý luồng (stream) hoặc chạy toàn bộ hệ thống (full)
+    profiles: ["stream", "full"]
+ 
+    # Chỉ mở đường NGOÀI (9092) ra máy. Đường TRONG (29092) chỉ các container
+    # cùng mạng Docker thấy, nên không cần publish.
+    ports:
+      - "9092:9092"
+ 
+    environment:
+      # ---- Múi giờ (truyền TZ vào mọi container) ----
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+ 
+      # Giới hạn bộ nhớ RAM tối đa (Xmx) và tối thiểu (Xms) cho Kafka đúng bằng 512 MB
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms512m"
+ 
+      # ---- Danh tính node: chế độ KRaft, một tiến trình đóng cả hai vai ----
+      # CLUSTER_ID là mã định danh cụm, PHẢI cố định. Đổi sau khi đã có dữ liệu
+      # trong volume thì Kafka từ chối khởi động (xem lỗi "Invalid cluster.id").
+      CLUSTER_ID: "euSFZP_NSF6NHkq1QobtCA"
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+ 
+      # ---- Hai đường vào (file 11 mục 5) ----
+      #   INTERNAL  kafka:29092     -> API (container) dùng
+      #   EXTERNAL  localhost:9092  -> Spark (WSL2, ngoài Docker) dùng
+      #   CONTROLLER 9093           -> nội bộ KRaft, không ai bên ngoài dùng
+      # LISTENERS     = cổng Kafka mở để lắng nghe bên trong container.
+      # ADVERTISED    = địa chỉ Kafka "dặn" client hãy dùng để kết nối lại.
+      KAFKA_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka:29092,EXTERNAL://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+ 
+      # ---- Mặc định cho topic ----
+      # Topic chính thức sẽ do scripts/create_topics.sh tạo; các giá trị này là lưới an toàn
+      # để topic nào lỡ tự sinh ra cũng đúng quy cách.
+      KAFKA_NUM_PARTITIONS: "3" #3 phân vùng
+      KAFKA_DEFAULT_REPLICATION_FACTOR: "1" #1 bản sao
+      KAFKA_LOG_RETENTION_HOURS: "168" #Kafka không xóa tin nhắn ngay sau khi Spark đọc xong, mà giữ lại trong 168 giờ (tương đương 7 ngày)
+ 
+      # ---- Một node duy nhất nên mọi topic nội bộ chỉ có 1 bản sao ----
+      # Không khai thì Kafka đòi 3 bản sao và treo vì chỉ có 1 broker.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0" #Kafka không cần chờ đợi (0 mili-giây) khi Spark bắt đầu kết nối vào đọc dữ liệu
+ 
+      # ---- Nơi Kafka ghi dữ liệu: trùng điểm gắn volume bên dưới ----
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+ 
+    volumes:
+      # Named volume: `docker compose down` không làm mất bản tin.
+      # Chỉ `down -v` mới xóa.
+      - kafka_data:/var/lib/kafka/data
+ 
+    healthcheck:
+      # Hỏi broker bằng công cụ có sẵn trong image. Ghi đè heap xuống nhỏ để tiến trình kiểm tra không ăn thêm 512 MB mỗi lần chạy.
+      test:
+        - CMD-SHELL
+        - >-
+          KAFKA_HEAP_OPTS="-Xmx128m -Xms64m"
+          /opt/kafka/bin/kafka-broker-api-versions.sh
+          --bootstrap-server localhost:9092 > /dev/null 2>&1
+      interval: 15s #Mỗi 15s test Kafka 1 lần
+      timeout: 15s  #Đợi 15s cho mỗi lần test
+      #Kafka 30 giây đầu tiên để khởi động; nếu sau 10 lần liên tiếp mà không thấy trả lời thì Docker mới kết luận hộp này bị hỏng (unhealthy)
+      retries: 10
+      start_period: 30s
+ 
+    # Cho Kafka thời gian đóng tệp gọn gàng khi `down`.
+    stop_grace_period: 30s
+ 
+volumes:
+  kafka_data:
