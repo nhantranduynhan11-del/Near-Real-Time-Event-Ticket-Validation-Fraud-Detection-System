@@ -1,0 +1,2 @@
+# Phiên bản đã chốt: xem spark/INSTALL.md (bảng phiên bản)
+pyspark==4.1.3
