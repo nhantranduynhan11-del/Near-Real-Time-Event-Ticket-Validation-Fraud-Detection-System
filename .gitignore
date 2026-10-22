@@ -1,1 +1,29 @@
+# ===== Python (giữ nguyên từ team) =====
 .venv/
+__pycache__/
+*.pyc
+
+# ===== Node.js (Role C) =====
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ===== Env (KHÔNG BAO GIỜ commit) =====
+.env
+.env.local
+
+# ===== Data (Bronze Parquet, checkpoint Spark) =====
+data/
+spark/checkpoint/
+
+# ===== Log =====
+*.log
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Docker / IDE =====
+*.pid
+.vscode/
+.idea/
