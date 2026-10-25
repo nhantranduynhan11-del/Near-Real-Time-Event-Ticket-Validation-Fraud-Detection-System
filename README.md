@@ -1,5 +1,8 @@
 # Ticket Control
 
+Hệ thống kiểm vé tại cổng, phát hiện vé dùng chung giữa các cổng. API + Kafka + Spark + SQL Server.
+Thiết kế nằm ở `Design/`, yêu cầu nằm ở `Requirements/`.
+
 ## 1. Cài đặt (máy trắng, Windows 10/11)
 
 1. **WSL2 + Ubuntu.** Mở PowerShell bằng quyền Administrator:
@@ -7,7 +10,7 @@
    wsl --install -d Ubuntu
    ```
    Khởi động lại máy, mở Ubuntu, tạo tên người dùng và mật khẩu.
-2. Tải **Docker Desktop.**, vào *Settings → Resources → WSL integration*, bật Ubuntu.
+2. Tải **Docker Desktop.**, vào *Settings → Resources → WSL integration*, bật cho Ubuntu.
 3. **Giới hạn RAM của WSL2.** Tạo file `C:\Users\<tên bạn>\.wslconfig`:
    ```
    [wsl2]
@@ -24,21 +27,27 @@ Làm trong Ubuntu. **Để repo trong thư mục home của WSL2** (ví dụ `~/
 ```bash
 git clone https://github.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System.git ~/ticket-control
 cd ~/ticket-control
-cp .env.example .env
+cp docker/.env.example docker/.env
 ```
+nano docker/.env.example 
 
-Mở `.env`, điền các biến còn trống:
+sau khi mở `.env`, điền các biến còn trống:
 
 - `DB_PASSWORD`: tối thiểu 8 ký tự, có chữ hoa, chữ thường, số và ký hiệu (SQL Server không khởi động nếu yếu).
-- `QR_HMAC_SECRET`, `JWT_SECRET`: chuỗi bất kỳ, giống nhau giữa các máy là tốt nhất.
+- `QR_HMAC_SECRET`: chuỗi bất kỳ, giống nhau giữa các máy là tốt nhất.
+
+ctrl + o -> Enter
+Ctrl + x
+## Nhớ cài Spark (phần của ông Nhân)
 
 ## 3. Chạy
 
 ```bash
 chmod +x scripts/*.sh
-./scripts/up.sh app      # SQL Server + API. Dùng hằng ngày.
+./scripts/up.sh app      # SQL Server + API. Dùng hằng ngày. (tạm thời bỏ qua dòng này, nếu lỡ nhập vào thì mấy ông ctrl + c để out khỏi trạng thái treo rồi gõ lệnh tiếp theo nha)
 ./scripts/up.sh stream   # SQL Server + Kafka + Spark. Không có API.
 ./scripts/up.sh full     # Tất cả. Dùng khi ghép nối và demo.
+./scripts/create_topics.sh -> tạo topic Kafka
 ```
 
 
@@ -46,24 +55,14 @@ chmod +x scripts/*.sh
 
 - `docker compose ps`: các dịch vụ `running`/`healthy`; `db-init` ở trạng thái `exited (0)` là đúng.
 - Mở <http://localhost:3000>: trang hiện trạng thái API, SQL Server, Kafka (chế độ `app` thì Kafka báo không kết nối, bình thường).
-- SSMS: kết nối `localhost,1433`, user `sa`, mật khẩu trong `.env`, bật *Trust server certificate*. Database `ticket_system` có đủ bảng, `ticket` có 7 vé.
 
 ## 4. Thử một lượt quét
 
-Chỉ chế độ `full`. Nếu API đã bật đăng nhập, gọi `POST http://localhost:3000/api/login` với `op_gate_a` / `Demo@123`, lấy `access_token` và gửi kèm header `Authorization: Bearer <token>`.
+curl -X POST http://localhost:3000/api/scan \
+  -H "Content-Type: application/json" \
+  -d '{"raw_qr_payload":"TK001.demo","ticket_id":"TK001","decode_error":false,"gate_id":"GATE_A","scanner_id":"SC_A1","scanned_at":"2026-12-12T19:00:01.000+07:00"}'
 
-`POST http://localhost:3000/api/scan`, body JSON:
-
-```json
-{
-  "raw_qr_payload": "TK001.demo",
-  "ticket_id": "TK001",
-  "decode_error": false,
-  "gate_id": "GATE_A",
-  "scanner_id": "SC_A1",
-  "scanned_at": "2026-12-12T19:00:01.000+07:00"
-}
-```
+sleep 10 #cho máy có thời gian ghi
 
 Kiểm tra bản tin đã vào Bronze:
 
@@ -88,4 +87,3 @@ docker compose --profile full down      # giữ dữ liệu
 docker compose --profile full down -v   # xóa luôn dữ liệu SQL Server
 kill "$(cat .spark.pid)"                # nếu Spark do up.sh bật
 ```
-
