@@ -14,7 +14,7 @@ services:
       - "${DB_PORT}:1433"
     volumes:
       - sqlserver_data:/var/opt/mssql
-      - ./database/backup:/var/opt/mssql/backup
+      - ../database/backup:/var/opt/mssql/backup
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -No -Q 'SELECT 1' -b -o /dev/null || exit 1"]
       interval: 10s
@@ -23,7 +23,7 @@ services:
       start_period: 40s
 
   db-init:
-    build: ./database/db-init
+    build: ./db-init
     profiles: ["app", "stream", "full"]
     depends_on:
       sqlserver:
@@ -34,7 +34,7 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - ./database:/scripts:ro
+      - ../database:/scripts:ro
     restart: "no"
 
   kafka:
@@ -42,32 +42,42 @@ services:
     container_name: kafka
     hostname: kafka
     profiles: ["stream", "full"]
+
     ports:
       - "9092:9092"
+
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
+
       KAFKA_HEAP_OPTS: "-Xmx512m -Xms512m"
+
       CLUSTER_ID: "euSFZP_NSF6NHkq1QobtCA"
       KAFKA_NODE_ID: "1"
       KAFKA_PROCESS_ROLES: "broker,controller"
       KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+
       KAFKA_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093"
       KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka:29092,EXTERNAL://localhost:9092"
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
       KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+
       KAFKA_NUM_PARTITIONS: "3"
       KAFKA_DEFAULT_REPLICATION_FACTOR: "1"
       KAFKA_LOG_RETENTION_HOURS: "168"
+
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
       KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: "1"
       KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: "1"
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+
     volumes:
       - kafka_data:/var/lib/kafka/data
+
     healthcheck:
       test:
         - CMD-SHELL
@@ -79,10 +89,11 @@ services:
       timeout: 15s
       retries: 10
       start_period: 30s
+
     stop_grace_period: 30s
 
   api:
-    build: ./api
+    build: ../api
     profiles: ["app", "full"]
     ports:
       - "${API_PORT}:3000"
