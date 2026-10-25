@@ -1,0 +1,113 @@
+services:
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    profiles: ["app", "stream", "full"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
+      MSSQL_PID: "Developer"
+      MSSQL_COLLATION: ${DB_COLLATION}
+      MSSQL_MEMORY_LIMIT_MB: "2048"
+      TZ: ${TZ}
+    ports:
+      - "${DB_PORT}:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+      - ./database/backup:/var/opt/mssql/backup
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -No -Q 'SELECT 1' -b -o /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  db-init:
+    build: ./database/db-init
+    profiles: ["app", "stream", "full"]
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      DB_HOST_INTERNAL: ${DB_HOST_INTERNAL}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./database:/scripts:ro
+    restart: "no"
+
+  kafka:
+    image: apache/kafka:4.1.2
+    container_name: kafka
+    hostname: kafka
+    profiles: ["stream", "full"]
+    ports:
+      - "9092:9092"
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms512m"
+      CLUSTER_ID: "euSFZP_NSF6NHkq1QobtCA"
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka:29092,EXTERNAL://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_NUM_PARTITIONS: "3"
+      KAFKA_DEFAULT_REPLICATION_FACTOR: "1"
+      KAFKA_LOG_RETENTION_HOURS: "168"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          KAFKA_HEAP_OPTS="-Xmx128m -Xms64m"
+          /opt/kafka/bin/kafka-broker-api-versions.sh
+          --bootstrap-server localhost:9092 > /dev/null 2>&1
+      interval: 15s
+      timeout: 15s
+      retries: 10
+      start_period: 30s
+    stop_grace_period: 30s
+
+  api:
+    build: ./api
+    profiles: ["app", "full"]
+    ports:
+      - "${API_PORT}:3000"
+    environment:
+      DB_HOST: ${DB_HOST_INTERNAL}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_ENCRYPT: ${DB_ENCRYPT}
+      KAFKA_BROKER: ${KAFKA_INTERNAL}
+      KAFKA_TOPIC: ${KAFKA_TOPIC}
+      KAFKA_DLQ_TOPIC: ${KAFKA_DLQ_TOPIC}
+      API_PORT: ${API_PORT}
+      TZ: ${TZ}
+      ACTIVE_EVENT_ID: ${ACTIVE_EVENT_ID}
+      QR_HMAC_SECRET: ${QR_HMAC_SECRET}
+      FRAUD_CONFIG_PATH: ${FRAUD_CONFIG_PATH}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  sqlserver_data:
+  kafka_data:
