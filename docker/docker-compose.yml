@@ -98,13 +98,13 @@ services:
     ports:
       - "${API_PORT}:3000"
     environment:
-      DB_HOST: ${DB_HOST_INTERNAL}
+      DB_HOST_INTERNAL: ${DB_HOST_INTERNAL}
       DB_PORT: ${DB_PORT}
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_ENCRYPT: ${DB_ENCRYPT}
-      KAFKA_BROKER: ${KAFKA_INTERNAL}
+      KAFKA_INTERNAL: ${KAFKA_INTERNAL}
       KAFKA_TOPIC: ${KAFKA_TOPIC}
       KAFKA_DLQ_TOPIC: ${KAFKA_DLQ_TOPIC}
       API_PORT: ${API_PORT}
@@ -117,6 +117,8 @@ services:
         condition: service_healthy
       db-init:
         condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
