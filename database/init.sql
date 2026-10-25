@@ -1,21 +1,3 @@
-/* =====================================================================
-   init.sql — Tạo cơ sở dữ liệu ticket_system (SQL Server 2022)
-   Nguồn thiết kế: Design/12_Database_Schema.md
-
-   Chạy được nhiều lần: bảng nào đã có thì bỏ qua, không xóa dữ liệu.
-   Muốn tạo lại từ đầu sau khi đổi thiết kế: xóa volume của SQL Server
-   (docker compose down -v) rồi khởi động lại.
-
-   Quy ước:
-     - Mọi chuỗi là NVARCHAR, collation Vietnamese_CI_AS.
-     - Mọi mốc thời gian là giờ Việt Nam (UTC+7, Asia/Ho_Chi_Minh),
-       kiểu DATETIME2(3). API, Spark và Docker phải ghim cùng múi giờ này
-       (xem Design/11_Architecture.md, mục 8).
-     - Các CHECK liệt kê giá trị dùng COLLATE Latin1_General_100_BIN2
-       để chỉ nhận đúng chữ hoa (vì Vietnamese_CI_AS không phân biệt
-       hoa thường, 'unused' sẽ lọt qua nếu không ép).
-   ===================================================================== */
-
 IF DB_ID(N'ticket_system') IS NULL
     CREATE DATABASE ticket_system COLLATE Vietnamese_CI_AS;
 GO
@@ -23,24 +5,22 @@ GO
 USE ticket_system;
 GO
 
-/* ---------------------------------------------------------------------
-   1. EVENT
-   --------------------------------------------------------------------- */
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
+
 IF OBJECT_ID(N'dbo.[event]', N'U') IS NULL
 CREATE TABLE dbo.[event] (
     event_id         NVARCHAR(20)  NOT NULL,
     event_name       NVARCHAR(200) NOT NULL,
-    admission_start  DATETIME2(3)  NOT NULL,   -- giờ Việt Nam
-    admission_end    DATETIME2(3)  NOT NULL,   -- giờ Việt Nam
+    admission_start  DATETIME2(3)  NOT NULL,
+    admission_end    DATETIME2(3)  NOT NULL,
 
     CONSTRAINT PK_event PRIMARY KEY (event_id),
     CONSTRAINT CK_event_window CHECK (admission_end > admission_start)
 );
 GO
 
-/* ---------------------------------------------------------------------
-   2. GATE
-   --------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.gate', N'U') IS NULL
 CREATE TABLE dbo.gate (
     gate_id    NVARCHAR(20)  NOT NULL,
@@ -50,10 +30,6 @@ CREATE TABLE dbo.gate (
 );
 GO
 
-/* ---------------------------------------------------------------------
-   3. EVENT_GATE  (liên kết M:N OPENS)
-   Ràng buộc tham gia toàn phần của EVENT kiểm tra trong checks.sql.
-   --------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.event_gate', N'U') IS NULL
 CREATE TABLE dbo.event_gate (
     event_id  NVARCHAR(20) NOT NULL,
@@ -65,10 +41,6 @@ CREATE TABLE dbo.event_gate (
 );
 GO
 
-/* ---------------------------------------------------------------------
-   4. GATE_TRAVEL_TIME  (liên kết đệ quy M:N WALK_TIME)
-   Mỗi cặp cổng lưu cả hai chiều. Tính đối xứng kiểm tra trong checks.sql.
-   --------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.gate_travel_time', N'U') IS NULL
 CREATE TABLE dbo.gate_travel_time (
     gate_id_1           NVARCHAR(20) NOT NULL,
@@ -83,11 +55,6 @@ CREATE TABLE dbo.gate_travel_time (
 );
 GO
 
-/* ---------------------------------------------------------------------
-   5. SCANNER
-   UQ (scanner_id, gate_id) là đích của khóa ngoại ghép từ scan_event,
-   bảo đảm máy quét ghi trên lượt quét đúng là máy đặt tại cổng đó.
-   --------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.scanner', N'U') IS NULL
 CREATE TABLE dbo.scanner (
     scanner_id  NVARCHAR(20) NOT NULL,
@@ -99,14 +66,11 @@ CREATE TABLE dbo.scanner (
 );
 GO
 
-/* ---------------------------------------------------------------------
-   6. APP_USER  (lớp cha + hai lớp con gộp, phân loại bằng role)
-   --------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.app_user', N'U') IS NULL
 CREATE TABLE dbo.app_user (
     user_id        NVARCHAR(20)  NOT NULL,
     username       NVARCHAR(50)  NOT NULL,
-    password_hash  NVARCHAR(255) NOT NULL,   -- bcrypt, không lưu mật khẩu gốc
+    password_hash  NVARCHAR(255) NOT NULL,
     last_name      NVARCHAR(50)  NOT NULL,
     first_name     NVARCHAR(50)  NOT NULL,
     phone          NVARCHAR(15)  NULL,
@@ -119,12 +83,6 @@ CREATE TABLE dbo.app_user (
 );
 GO
 
-/* ---------------------------------------------------------------------
-   7. TICKET
-   (event_id, assigned_gate_id) trỏ vào event_gate: vé chỉ được chỉ định
-   vào cổng mà sự kiện của vé có mở. assigned_gate_id NULL thì SQL Server
-   bỏ qua khóa ngoại ghép này.
-   --------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.ticket', N'U') IS NULL
 CREATE TABLE dbo.ticket (
     ticket_id         NVARCHAR(20) NOT NULL,
@@ -142,15 +100,9 @@ CREATE TABLE dbo.ticket (
 );
 GO
 
-/* ---------------------------------------------------------------------
-   8. SCAN_EVENT  (tầng Silver, chỉ thêm, không sửa, không xóa)
-   Spark KHÔNG ghi bốn cột tính toán ở cuối bảng.
-   ticket_id chỉ chứa mã vé đã khớp với bảng ticket; QR hỏng hoặc mã vé
-   không có trong DB thì để NULL (mã gốc nằm trong raw_qr_payload và Bronze).
-   --------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.scan_event', N'U') IS NULL
 CREATE TABLE dbo.scan_event (
-    -- Khóa và khóa ngoại
+
     scan_event_id                UNIQUEIDENTIFIER NOT NULL,
     ticket_id                    NVARCHAR(20)     NULL,
     scanner_id                   NVARCHAR(20)     NOT NULL,
@@ -158,32 +110,28 @@ CREATE TABLE dbo.scan_event (
     operator_id                  NVARCHAR(20)     NULL,
     previous_scan_event_id       UNIQUEIDENTIFIER NULL,
 
-    -- Dữ liệu gốc từ máy quét và API
     raw_qr_payload               NVARCHAR(512)    NOT NULL,
     decode_error                 BIT              NOT NULL,
-    scanned_at                   DATETIME2(3)     NOT NULL,   -- giờ máy quét, chỉ để xem
-    received_at                  DATETIME2(3)     NOT NULL,   -- giờ API nhận, mốc chuẩn
+    scanned_at                   DATETIME2(3)     NOT NULL,
+    received_at                  DATETIME2(3)     NOT NULL,
 
-    -- Kết quả xử lý của Spark
     processing_ts                DATETIME2(3)     NOT NULL,
     ticket_status_before         NVARCHAR(20)     NULL,
     ticket_status_after          NVARCHAR(20)     NULL,
     scan_result                  NVARCHAR(20)     NOT NULL,
     alert_level                  NVARCHAR(20)     NOT NULL,
     alert_code                   NVARCHAR(20)     NULL,
-    previous_scan_gate_id        NVARCHAR(20)     NULL,       -- ảnh chụp, không đặt khóa ngoại
+    previous_scan_gate_id        NVARCHAR(20)     NULL,
     time_since_previous_scan_ms  INT              NULL,
-    min_travel_time_ms           INT              NULL,       -- ảnh chụp từ gate_travel_time
-    ticket_assigned_gate_id      NVARCHAR(20)     NULL,       -- ảnh chụp từ ticket
+    min_travel_time_ms           INT              NULL,
+    ticket_assigned_gate_id      NVARCHAR(20)     NULL,
     distinct_wrong_gate_count    INT              NULL,
 
-    -- Cột tính toán (SQL Server tự tính)
     is_wrong_gate    AS CAST(CASE WHEN scan_result = N'WRONG_GATE' THEN 1 ELSE 0 END AS BIT) PERSISTED,
     is_duplicate     AS CAST(CASE WHEN scan_result = N'USED'       THEN 1 ELSE 0 END AS BIT) PERSISTED,
     fraud_alert      AS CAST(CASE WHEN alert_level = N'FRAUD'      THEN 1 ELSE 0 END AS BIT) PERSISTED,
     ingestion_lag_ms AS DATEDIFF(MILLISECOND, received_at, processing_ts) PERSISTED,
 
-    -- Khóa
     CONSTRAINT PK_scan_event PRIMARY KEY (scan_event_id),
     CONSTRAINT FK_scan_event_ticket   FOREIGN KEY (ticket_id)   REFERENCES dbo.ticket (ticket_id),
     CONSTRAINT FK_scan_event_gate     FOREIGN KEY (gate_id)     REFERENCES dbo.gate (gate_id),
@@ -193,7 +141,6 @@ CREATE TABLE dbo.scan_event (
     CONSTRAINT FK_scan_event_previous FOREIGN KEY (previous_scan_event_id)
         REFERENCES dbo.scan_event (scan_event_id),
 
-    -- Miền giá trị
     CONSTRAINT CK_scan_event_result CHECK (scan_result COLLATE Latin1_General_100_BIN2 IN
         (N'VALID', N'INVALID', N'USED', N'CANCELLED', N'EXPIRED', N'WRONG_GATE')),
     CONSTRAINT CK_scan_event_level CHECK (alert_level COLLATE Latin1_General_100_BIN2 IN
@@ -212,7 +159,6 @@ CREATE TABLE dbo.scan_event (
         (min_travel_time_ms          IS NULL OR min_travel_time_ms > 0) AND
         (distinct_wrong_gate_count   IS NULL OR distinct_wrong_gate_count >= 0)),
 
-    -- Ràng buộc giữa các cột trong cùng dòng (file 07, 08)
     CONSTRAINT CK_scan_event_ts CHECK (processing_ts >= received_at),
     CONSTRAINT CK_scan_event_prev_self CHECK (previous_scan_event_id IS NULL OR previous_scan_event_id <> scan_event_id),
     CONSTRAINT CK_scan_event_status_pair CHECK (
@@ -240,17 +186,13 @@ CREATE TABLE dbo.scan_event (
 );
 GO
 
-/* ---------------------------------------------------------------------
-   9. FRAUD_ALERT  (thực thể yếu, định danh qua liên kết 1:1 GENERATES)
-   Spark ghi dòng này cùng giao dịch với dòng scan_event tương ứng.
-   --------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.fraud_alert', N'U') IS NULL
 CREATE TABLE dbo.fraud_alert (
     scan_event_id  UNIQUEIDENTIFIER NOT NULL,
     alert_code     NVARCHAR(20)     NOT NULL,
     alert_level    NVARCHAR(20)     NOT NULL,
     created_at     DATETIME2(3)     NOT NULL
-        CONSTRAINT DF_fraud_alert_created_at DEFAULT (DATEADD(HOUR, 7, SYSUTCDATETIME())),   -- giờ Việt Nam, không phụ thuộc múi giờ của container
+        CONSTRAINT DF_fraud_alert_created_at DEFAULT (DATEADD(HOUR, 7, SYSUTCDATETIME())),
 
     CONSTRAINT PK_fraud_alert PRIMARY KEY (scan_event_id),
     CONSTRAINT FK_fraud_alert_scan_event FOREIGN KEY (scan_event_id)
@@ -263,6 +205,95 @@ CREATE TABLE dbo.fraud_alert (
         (alert_code IN (N'INVALID_QR', N'DUPLICATE_SCAN', N'IMPOSSIBLE_TRAVEL',
                         N'REVOKED_TICKET', N'WRONG_GATE_FRAUD') AND alert_level = N'FRAUD'))
 );
+GO
+
+IF OBJECT_ID(N'dbo.gold_gate_stats', N'U') IS NULL
+CREATE TABLE dbo.gold_gate_stats (
+    event_id        NVARCHAR(20)  NOT NULL,
+    gate_id         NVARCHAR(20)  NOT NULL,
+    total_scans     INT           NOT NULL CONSTRAINT DF_gold_gate_stats_total     DEFAULT (0),
+    cnt_valid       INT           NOT NULL CONSTRAINT DF_gold_gate_stats_valid     DEFAULT (0),
+    cnt_invalid     INT           NOT NULL CONSTRAINT DF_gold_gate_stats_invalid   DEFAULT (0),
+    cnt_used        INT           NOT NULL CONSTRAINT DF_gold_gate_stats_used      DEFAULT (0),
+    cnt_cancelled   INT           NOT NULL CONSTRAINT DF_gold_gate_stats_cancelled DEFAULT (0),
+    cnt_expired     INT           NOT NULL CONSTRAINT DF_gold_gate_stats_expired   DEFAULT (0),
+    cnt_wrong_gate  INT           NOT NULL CONSTRAINT DF_gold_gate_stats_wrong     DEFAULT (0),
+    fraud_count     INT           NOT NULL CONSTRAINT DF_gold_gate_stats_fraud     DEFAULT (0),
+    warning_count   INT           NOT NULL CONSTRAINT DF_gold_gate_stats_warning   DEFAULT (0),
+    last_scan_at    DATETIME2(3)  NULL,
+    updated_at      DATETIME2(3)  NOT NULL CONSTRAINT DF_gold_gate_stats_updated_at
+        DEFAULT (DATEADD(HOUR, 7, SYSUTCDATETIME())),
+
+    CONSTRAINT PK_gold_gate_stats PRIMARY KEY (event_id, gate_id),
+    CONSTRAINT FK_gold_gate_stats_event FOREIGN KEY (event_id) REFERENCES dbo.[event] (event_id),
+    CONSTRAINT FK_gold_gate_stats_gate  FOREIGN KEY (gate_id)  REFERENCES dbo.gate (gate_id),
+    CONSTRAINT CK_gold_gate_stats_nonneg CHECK (
+        total_scans >= 0 AND cnt_valid >= 0 AND cnt_invalid >= 0 AND cnt_used >= 0 AND
+        cnt_cancelled >= 0 AND cnt_expired >= 0 AND cnt_wrong_gate >= 0 AND
+        fraud_count >= 0 AND warning_count >= 0)
+);
+GO
+
+IF OBJECT_ID(N'dbo.gold_event_stats', N'U') IS NULL
+CREATE TABLE dbo.gold_event_stats (
+    event_id        NVARCHAR(20)  NOT NULL,
+    bucket_start    DATETIME2(3)  NOT NULL,
+    total_scans     INT           NOT NULL CONSTRAINT DF_gold_event_stats_total     DEFAULT (0),
+    cnt_valid       INT           NOT NULL CONSTRAINT DF_gold_event_stats_valid     DEFAULT (0),
+    cnt_invalid     INT           NOT NULL CONSTRAINT DF_gold_event_stats_invalid   DEFAULT (0),
+    cnt_used        INT           NOT NULL CONSTRAINT DF_gold_event_stats_used      DEFAULT (0),
+    cnt_cancelled   INT           NOT NULL CONSTRAINT DF_gold_event_stats_cancelled DEFAULT (0),
+    cnt_expired     INT           NOT NULL CONSTRAINT DF_gold_event_stats_expired   DEFAULT (0),
+    cnt_wrong_gate  INT           NOT NULL CONSTRAINT DF_gold_event_stats_wrong     DEFAULT (0),
+    fraud_count     INT           NOT NULL CONSTRAINT DF_gold_event_stats_fraud     DEFAULT (0),
+    warning_count   INT           NOT NULL CONSTRAINT DF_gold_event_stats_warning   DEFAULT (0),
+    updated_at      DATETIME2(3)  NOT NULL CONSTRAINT DF_gold_event_stats_updated_at
+        DEFAULT (DATEADD(HOUR, 7, SYSUTCDATETIME())),
+
+    CONSTRAINT PK_gold_event_stats PRIMARY KEY (event_id, bucket_start),
+    CONSTRAINT FK_gold_event_stats_event FOREIGN KEY (event_id) REFERENCES dbo.[event] (event_id),
+    CONSTRAINT CK_gold_event_stats_nonneg CHECK (
+        total_scans >= 0 AND cnt_valid >= 0 AND cnt_invalid >= 0 AND cnt_used >= 0 AND
+        cnt_cancelled >= 0 AND cnt_expired >= 0 AND cnt_wrong_gate >= 0 AND
+        fraud_count >= 0 AND warning_count >= 0)
+);
+GO
+
+IF OBJECT_ID(N'dbo.gold_alert', N'U') IS NULL
+CREATE TABLE dbo.gold_alert (
+    scan_event_id                UNIQUEIDENTIFIER NOT NULL,
+    event_id                     NVARCHAR(20)     NOT NULL,
+    created_at                   DATETIME2(3)     NOT NULL,
+    received_at                  DATETIME2(3)     NOT NULL,
+    alert_level                  NVARCHAR(20)     NOT NULL,
+    alert_code                   NVARCHAR(20)     NOT NULL,
+    scan_result                  NVARCHAR(20)     NOT NULL,
+    ticket_id                    NVARCHAR(20)     NULL,
+    gate_id                      NVARCHAR(20)     NOT NULL,
+    scanner_id                   NVARCHAR(20)     NOT NULL,
+    previous_scan_gate_id        NVARCHAR(20)     NULL,
+    time_since_previous_scan_ms  INT              NULL,
+    min_travel_time_ms           INT              NULL,
+    ticket_assigned_gate_id      NVARCHAR(20)     NULL,
+    distinct_wrong_gate_count    INT              NULL,
+    raw_qr_preview               NVARCHAR(24)     NULL,
+
+    CONSTRAINT PK_gold_alert PRIMARY KEY (scan_event_id),
+    CONSTRAINT FK_gold_alert_scan_event FOREIGN KEY (scan_event_id) REFERENCES dbo.scan_event (scan_event_id),
+    CONSTRAINT FK_gold_alert_event FOREIGN KEY (event_id) REFERENCES dbo.[event] (event_id),
+    CONSTRAINT CK_gold_alert_level CHECK (alert_level COLLATE Latin1_General_100_BIN2 IN (N'WARNING', N'FRAUD')),
+    CONSTRAINT CK_gold_alert_code CHECK (alert_code COLLATE Latin1_General_100_BIN2 IN
+        (N'INVALID_QR', N'DUPLICATE_SCAN', N'IMPOSSIBLE_TRAVEL', N'REVOKED_TICKET',
+         N'WRONG_GATE_WARNING', N'WRONG_GATE_FRAUD')),
+    CONSTRAINT CK_gold_alert_code_level CHECK (
+        (alert_code = N'WRONG_GATE_WARNING' AND alert_level = N'WARNING') OR
+        (alert_code IN (N'INVALID_QR', N'DUPLICATE_SCAN', N'IMPOSSIBLE_TRAVEL',
+                        N'REVOKED_TICKET', N'WRONG_GATE_FRAUD') AND alert_level = N'FRAUD'))
+);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_gold_alert_event_created' AND object_id = OBJECT_ID(N'dbo.gold_alert'))
+    CREATE INDEX IX_gold_alert_event_created ON dbo.gold_alert (event_id, created_at DESC);
 GO
 
 PRINT N'init.sql: hoàn tất.';
