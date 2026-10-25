@@ -119,6 +119,7 @@ services:
         condition: service_completed_successfully
       kafka:
         condition: service_healthy
+        required: false
     restart: unless-stopped
 
 volumes:
