@@ -70,7 +70,7 @@ Kiểm tra bản tin đã vào Bronze:
 find data/bronze -name '*.parquet'
 ```
 
-Có tệp mới trong `data/bronze/scan_events/year=…/month=…/day=…/hour=…/` là đạt.
+Có tệp mới trong `data/bronze/scan_events/year=…/month=…/day=…/hour=…/` là đạt. Riêng phần này trong dự án tui chưa thấy có thao tác ghi parquet nên tui không thể test reset bằng repo chính thức này.
 
 ## 5. Đưa dữ liệu về ban đầu
 
