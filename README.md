@@ -28,7 +28,7 @@ docker compose version
 
 ```bash
 cd ~
-git clone https://github.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System/tree/main ticket-control
+git clone https://github.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System.git ticket-control
 cd ticket-control
 cp docker/.env.example docker/.env
 nano docker/.env.example 
