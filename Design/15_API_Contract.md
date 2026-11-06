@@ -15,10 +15,25 @@ phần 7 là mấy phần tui muốn thêm, nhưng có file 14 thì tui mới ch
 | Thời gian | Chuỗi ISO 8601 **kèm offset `+07:00`**, chính xác tới mili giây: `2026-12-12T19:00:01.000+07:00`. API nhận mọi offset hợp lệ, đổi về giờ Việt Nam trước khi ghi `DATETIME2(3)`, và luôn trả `+07:00`. Chuỗi thiếu offset (ví dụ `2026-12-12T19:00:01`) bị từ chối bằng `400`, vì không biết là giờ nào. |
 | Khoảng thời gian | Số nguyên mili giây, tên trường kết thúc `_ms` |
 | Tỷ lệ | Số thực từ 0 đến 1, làm tròn 4 chữ số (`0.0174` là 1,74%). Giao diện tự nhân 100 |
-| Biến môi trường của API | Lấy từ `.env` ở file 11 mục 8: `ACTIVE_EVENT_ID`, `TZ=Asia/Ho_Chi_Minh`, `API_PORT`, `DB_*`, `KAFKA_*`. API cần thêm 3 biến **chưa có** trong `.env.example`: `JWT_SECRET`, `JWT_EXPIRES_IN` (12 giờ), `SCAN_WAIT_MS` (3000) |
+| Biến môi trường của API | Lấy từ `.env` ở file 11 mục 8: `ACTIVE_EVENT_ID`, `TZ=Asia/Ho_Chi_Minh`, `API_PORT`, `DB_*`, `KAFKA_*`. API cần thêm 3 biến **chưa có** trong `.env.example`: `JWT_SECRET`, `JWT_EXPIRES_IN` (12 giờ), `SCAN_WAIT_MS` (3000). `QR_HMAC_SECRET` đã có nhưng đang để trống, bắt buộc điền (xem "Định dạng mã QR và cách ký") |
 | Phục vụ giao diện | API Express ở cổng 3000 phục vụ luôn trang dashboard dưới dạng tệp tĩnh (file 11, mục 1 và 6). Cùng một origin với `/api` nên không cần CORS. Mọi đường dẫn ngoài `/api` là tệp tĩnh, không thuộc tài liệu này. Thư viện biểu đồ nằm trong repo, không tải từ mạng |
 | Truy vấn SQL Server | Gắn mọi tham số chuỗi bằng kiểu `NVarChar` (file 11, mục 4). Gắn `VarChar` thì so sánh với cột `NVARCHAR` bị chuyển kiểu ngầm và chỉ mục không được dùng |
 | Phân trang | Query `page` (mặc định 1), `page_size` (mặc định 50, tối đa 200). Trả `{ "items": [...], "page": 1, "page_size": 50, "total": 123 }` |
+
+### Định dạng mã QR và cách ký
+
+| Nội dung | Quy ước |
+|---|---|
+| Chuỗi trong QR | `<ticket_id>.<chữ_ký>`. Ví dụ: `TK001.` theo sau 22 ký tự chữ ký. Tổng khoảng 28 ký tự. |
+| Chữ ký | `base64url(HMAC-SHA256(QR_HMAC_SECRET, ticket_id))`, lấy **16 byte đầu**, tức 22 ký tự, bỏ dấu `=`. Chỉ ký `ticket_id`; vé thuộc sự kiện nào do Spark tra DB |
+| Ký tự phân cách | Dấu `.`. An toàn vì `ticket_id` chỉ gồm `A-Z0-9_`. Khi tách, cắt tại dấu `.` **cuối cùng** |
+| Ai ký | **API**, qua `GET /api/tickets/:id/qr` (3.8). Trình duyệt không bao giờ giữ `QR_HMAC_SECRET` |
+| Ai kiểm tra | **API**, trong `POST /scan` (2.1). Trình duyệt chỉ đọc QR rồi gửi `raw_qr_payload` nguyên văn, không kiểm chữ ký |
+| So sánh chữ ký | `crypto.timingSafeEqual` trên hai chuỗi cùng độ dài. Khác độ dài thì coi là sai, không so |
+| Chữ ký sai hoặc sai cấu trúc | Lượt quét **vẫn đi tiếp**: API đặt `decode_error = true`, `ticket_id = null`, đẩy vào Kafka như bình thường. Spark cho `scan_result = INVALID`, cảnh báo `INVALID_QR` (R1, TC01). API không trả `4xx` và không tự kết luận |
+| Chữ ký đúng | API lấy `ticket_id` từ chính `raw_qr_payload` và dùng giá trị này, bỏ qua `ticket_id` client gửi |
+| Secret | `QR_HMAC_SECRET` trong `.env`, tối thiểu 32 ký tự ngẫu nhiên (`openssl rand -hex 32`). Để trống thì API từ chối khởi động. Đổi secret thì mọi mã QR đã in mất hiệu lực |
+| Mức bảo mật | Chống làm giả mã QR cho một `ticket_id` có thật. Không chống được việc chụp lại mã của vé thật; việc đó do R3/R4 phát hiện |
 
 ### Dạng lỗi chung
 
@@ -310,8 +325,8 @@ Máy quét gửi một lượt quét. API bổ sung `scan_event_id`, `received_a
 
 | Trường | Kiểu | Bắt buộc | Quy tắc |
 |---|---|---|---|
-| `raw_qr_payload` | string | Có | Không rỗng, tối đa 512 ký tự (`scan_event.raw_qr_payload NVARCHAR(512)`) |
-| `ticket_id` | string hoặc null | Có điều kiện | Bắt buộc khi `decode_error = false`; phải `null` khi `decode_error = true` |
+| `raw_qr_payload` | string | Có | Không rỗng, tối đa 512 ký tự (`scan_event.raw_qr_payload NVARCHAR(512)`). Nguyên văn chuỗi đọc từ QR, dạng `<ticket_id>.<chữ_ký>` |
+| `ticket_id` | string hoặc null | Có điều kiện | Bắt buộc khi `decode_error = false`; phải `null` khi `decode_error = true`. Là giá trị tạm do trình duyệt cắt từ chuỗi QR; API kiểm chữ ký rồi **ghi đè** bằng giá trị rút từ `raw_qr_payload` (xem "Hành vi của API") |
 | `decode_error` | boolean | Có | |
 | `gate_id` | string | Có | Phải có trong `gate` |
 | `scanner_id` | string | Có | Phải có trong `scanner` **và** đặt tại đúng `gate_id` này |
@@ -380,6 +395,7 @@ Thiết bị **không gửi lại** `POST /scan`; nó hỏi `GET /api/scan/:scan
 
 **Hành vi của API**
 
+- **Kiểm chữ ký QR** (trước khi đẩy Kafka): tách `raw_qr_payload` tại dấu `.` cuối, tính lại HMAC của phần `ticket_id` rồi so (chi tiết ở "Định dạng mã QR và cách ký"). Đúng: dùng `ticket_id` rút từ payload. Sai, thiếu dấu `.` hoặc `decode_error = true` từ client: gửi bản tin với `decode_error = true`, `ticket_id = null`, **không** trả lỗi. Đây là kiểm tra tính toàn vẹn của dữ liệu đầu vào, không phải kết luận nghiệp vụ; API vẫn không tra vé và `scan_result` vẫn do Spark quyết.
 - `scan_event_id`: UUID v4 sinh mới mỗi lần gọi. `received_at`: giờ máy chủ, đã ghim `Asia/Ho_Chi_Minh` (không dùng `toISOString()`).
 - Bản tin đẩy vào Kafka là JSON gồm đúng 9 trường của Bronze (file 13, phần A): `scan_event_id`, `raw_qr_payload`, `ticket_id`, `decode_error`, `gate_id`, `scanner_id`, `operator_id`, `scanned_at`, `received_at`. Hai trường giờ là chuỗi ISO 8601 kèm `+07:00` (Spark đọc với `spark.sql.session.timeZone=Asia/Ho_Chi_Minh`); định dạng chính xác cần A xác nhận khi viết bộ đọc.
 - **Topic `scan-events`**, 3 phần vùng, **khóa phân vùng là `ticket_id`** (file 11, mục 5): mọi lượt quét của một vé đi vào cùng một phần vùng nên được xử lý theo thứ tự, điều kiện để R3 và R4 so đúng lần quét trước. `ticket_id = null` (QR hỏng) thì không đặt khóa. API nối qua `kafka:29092` (`KAFKA_INTERNAL`).
@@ -567,6 +583,28 @@ Giới hạn: tối đa 10 MB và 50 000 dòng mỗi lần.
 | 413 | `PAYLOAD_TOO_LARGE` | Quá 10 MB hoặc 50 000 dòng |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Không phải CSV hoặc JSON |
 
+### 3.8 `GET /api/tickets/:id/qr`
+
+Trả chuỗi QR đã ký của một vé, cho trang in vé. **Quyền:** `EVENT_SUPERVISOR`. Chỉ đọc. Trình duyệt vẽ ảnh QR từ chuỗi này bằng thư viện sinh QR trong `api/public/vendor/`.
+
+**Phản hồi `200`**
+
+```json
+{
+  "ticket_id": "TK001",
+  "qr_payload": "TK001.<22 ký tự chữ ký>"
+}
+```
+
+Chuỗi trả về quét lại qua `POST /scan` thì chữ ký đạt. Endpoint không đổi trạng thái vé và không ghi gì. Vé ở trạng thái nào cũng được sinh mã (vé `CANCELLED` vẫn in được; quét sẽ ra `CANCELLED`).
+
+| HTTP | `error.code` | Khi nào |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | `:id` sai định dạng |
+| 401 / 403 | `UNAUTHENTICATED` / `FORBIDDEN` | Thiếu token / không phải `EVENT_SUPERVISOR` |
+| 404 | `TICKET_NOT_FOUND` | Không có vé |
+| 500 | `INTERNAL_ERROR` | `QR_HMAC_SECRET` rỗng (không nên xảy ra vì API không khởi động được) |
+
 ---
 
 ## 4. Event, Gate, Scanner
@@ -700,6 +738,7 @@ Ký hiệu: **R** đọc, **W** ghi (thêm hoặc sửa), **D** xóa. Cột ghi 
 | `PUT /tickets/:id` | `ticket`, `event_gate` | `ticket` W (assigned_gate_id) |
 | `POST /tickets/:id/cancel` | `ticket` | `ticket` W (ticket_status) |
 | `DELETE /tickets/:id` | `ticket`, `scan_event` (ticket_id) | `ticket` D |
+| `GET /tickets/:id/qr` | `ticket` (ticket_id). Dùng `QR_HMAC_SECRET` để ký | — |
 | `POST /tickets/import` | `event`, `event_gate`, `ticket` (ticket_id) | `ticket` W (ticket_id, event_id, assigned_gate_id) |
 | `POST /events`, `PUT /events/:id` | `event`, `gate`, `ticket` (assigned_gate_id, khi bỏ cổng) | `event` W (event_id, event_name, admission_start, admission_end); `event_gate` W/D |
 | `GET /events`, `/events/:id` | `event`, `event_gate` | — |
