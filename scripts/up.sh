@@ -6,12 +6,14 @@
 # Không truyền gì thì chạy app.
 #
 # docker-compose.yml và .env nằm trong docker/ (không phải thư mục gốc repo).
-# Chế độ stream/full: tự tạo topic (scripts/create_topics.sh) rồi bật job Bronze (spark/run_bronze.sh).
+# Chế độ stream/full: tự tạo topic (scripts/create_topics.sh) rồi bật pipeline Spark
+# (spark/run_pipeline.sh: Bronze + Silver trong một tiến trình).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 MODE="${1:-app}"
-SPARK_SCRIPT="${SPARK_SCRIPT:-spark/run_bronze.sh}"   # job Bronze do role B viết
+SPARK_SCRIPT="${SPARK_SCRIPT:-spark/run_pipeline.sh}"   # Bronze + Silver, do role B viết
+SPARK_PATTERN="bronze_scan_events.py|stream_scan_events.py"   # pgrep/pkill hiểu "|" sẵn (regex mở rộng)
 PID_FILE=".spark.pid"
 LOG_FILE="logs/spark.log"
 
@@ -51,8 +53,8 @@ if [ "$MODE" = "stream" ] || [ "$MODE" = "full" ]; then
   # Spark chạy trực tiếp trong WSL2, không đóng hộp (file 11, mục 2)
   if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
     echo "Spark đang chạy (pid $(cat "$PID_FILE"))."
-  elif pgrep -f bronze_scan_events.py > /dev/null 2>&1; then
-    echo "Đã có một job Bronze chạy tay. Không bật thêm (hai job dùng chung checkpoint sẽ hỏng)."
+  elif pgrep -f "$SPARK_PATTERN" > /dev/null 2>&1; then
+    echo "Đã có một job Spark chạy tay. Không bật thêm (hai job dùng chung checkpoint sẽ hỏng)."
   elif [ -f "$SPARK_SCRIPT" ]; then
     mkdir -p logs
     nohup bash "$SPARK_SCRIPT" > "$LOG_FILE" 2>&1 &
