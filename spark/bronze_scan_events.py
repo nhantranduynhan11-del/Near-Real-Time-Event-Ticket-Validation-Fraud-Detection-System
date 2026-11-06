@@ -89,12 +89,17 @@ def non_empty(col_name):
 
 
 def parse_events(raw_df: DataFrame) -> DataFrame:
-    """Nhận DataFrame có cột Kafka (key, value). Trả về thêm các cột đã tách và cờ is_valid."""
+    """Nhận DataFrame có cột Kafka (key, value). Trả về thêm các cột đã tách và cờ is_valid.
+
+    Nếu có cột `partition`, `offset` của Kafka thì giữ lại (job Silver cần để sắp thứ tự hai lượt
+    quét cùng mili giây). Bronze không ghi hai cột này vì to_bronze() chọn cột tường minh.
+    """
     raw_json = F.col("value").cast("string")
+    kafka_meta = [c for c in ("partition", "offset") if c in raw_df.columns]
     parsed = (raw_df
-              .select(F.col("key"), raw_json.alias("raw_json"),
+              .select(F.col("key"), *kafka_meta, raw_json.alias("raw_json"),
                       F.from_json(raw_json, RAW_SCHEMA).alias("e"))
-              .select("key", "raw_json", "e.*"))
+              .select("key", *kafka_meta, "raw_json", "e.*"))
     # try_cast: chuỗi giờ hỏng -> NULL. (Spark 4 bật ANSI mặc định, cast thường sẽ ném lỗi.)
     # Chuỗi có +07:00 hoặc Z được đổi đúng sang thời điểm; chuỗi không có múi giờ hiểu theo giờ VN.
     typed = (parsed

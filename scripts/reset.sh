@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 
 SQL_FILE="database/reset_test_data.sql"
 BRONZE_DIR="data/bronze"
-CHECKPOINT_DIR="data/checkpoints"      # job Bronze lưu ở data/checkpoints/bronze_scan_events
+CHECKPOINT_DIR="data/checkpoints"      # bronze_scan_events/ và silver_scan_events/
 PID_FILE=".spark.pid"
 SQLCMD="${SQLCMD:-/opt/mssql-tools18/bin/sqlcmd}"
 KAFKA_CONTAINER="${KAFKA_CONTAINER:-kafka}"
@@ -41,9 +41,15 @@ if [ -f "$PID_FILE" ]; then
   fi
   rm -f "$PID_FILE"
 fi
-if pgrep -f bronze_scan_events.py > /dev/null 2>&1; then
-  pkill -f bronze_scan_events.py && echo "Đã dừng job Bronze chạy tay."
+SPARK_PATTERN="bronze_scan_events.py|stream_scan_events.py"   # pgrep/pkill hiểu "|" sẵn (regex mở rộng)
+if pgrep -f "$SPARK_PATTERN" > /dev/null 2>&1; then
+  pkill -f "$SPARK_PATTERN" && echo "Đã dừng job Spark chạy tay."
 fi
+# Đợi Spark thoát hẳn: còn chạy mà xóa checkpoint thì nó có thể ghi lại một checkpoint dở dang.
+for _ in $(seq 1 30); do
+  pgrep -f "$SPARK_PATTERN" > /dev/null 2>&1 || break
+  sleep 1
+done
 sleep 2
 
 # 2. Reset SQL Server (cần container sqlserver đang chạy)

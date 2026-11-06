@@ -96,6 +96,32 @@ find data/bronze -name '*.parquet'
 ```
 Có file `.parquet` mới là đạt.
 
+## 5b. Silver (Spark ghi `scan_event`, `fraud_alert`, đổi trạng thái vé)
+
+`./scripts/up.sh stream` bật `spark/run_pipeline.sh`: một tiến trình Spark chạy cả Bronze và Silver.
+Lần đầu Spark tải thêm driver JDBC của SQL Server. Thiết kế ở `Design/13_Bronze_Silver.md` phần D, E.
+
+Trước ngày demo (12/12/2026) phải dời khung giờ nhận khách về quanh hiện tại, nếu không mọi vé ra `EXPIRED`:
+
+```bash
+./scripts/dev_event_window.sh now       # trả lại giờ demo: ./scripts/dev_event_window.sh demo
+python3 scripts/send_scans.py TK001@GATE_A TK001@GATE_D      # gửi thẳng vào Kafka
+python3 scripts/send_scans.py TK002@GATE_B@-1800 TK002@GATE_B # lượt đầu cách đây 30 phút
+python3 scripts/send_scans.py FORGED:TK001@GATE_A             # QR sai chữ ký -> INVALID
+python3 scripts/send_scans.py --qr TK001                      # in chuỗi QR đã ký (file 15)
+```
+
+Chuỗi QR được ký bằng `QR_HMAC_SECRET` trong `docker/.env`, nên biến này phải có, tối thiểu 32 ký tự (`openssl rand -hex 32`).
+
+Kiểm thử của Role B:
+
+```bash
+.venv/bin/python spark/tests/test_silver_logic.py   # luật Silver, không cần Docker
+./scripts/test_silver.sh                            # đầu-cuối, XÓA dữ liệu quét, tắt Spark
+./scripts/test_silver_restart.sh                    # kill -9 Spark giữa chừng rồi bật lại
+./scripts/measure_ingestion_lag.sh                  # đo độ trễ 100 lượt -> docs/ingestion_lag.md
+```
+
 ## 6. Đưa dữ liệu về ban đầu
 
 ```bash
