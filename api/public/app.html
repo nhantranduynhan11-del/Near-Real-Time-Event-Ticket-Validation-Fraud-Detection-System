@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticket Control</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div>
+      <div class="brand">Ticket Control</div>
+      <div class="sub" id="who" style="margin:0">…</div>
+    </div>
+    <button class="btn" id="logout" type="button">Đăng xuất</button>
+  </div>
+</header>
+
+<main class="app-main">
+  <!-- Các trang Phase 6 sẽ bật dần tại đây (quét vé, in vé, quản trị vé, dashboard). -->
+  <nav class="nav" id="nav" aria-label="Chức năng"></nav>
+
+  <section class="card section">
+    <h2>Trạng thái hệ thống</h2>
+    <p class="sub">Các phần của hệ thống</p>
+    <div id="list" aria-live="polite"></div>
+    <div class="foot">
+      <button id="refresh" type="button" class="btn">Kiểm tra lại</button>
+      <span id="when">Chưa kiểm tra</span>
+    </div>
+  </section>
+</main>
+
+<script src="js/auth.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // Màn hình này cần đăng nhập; không có phiên hợp lệ thì quay về trang đăng nhập.
+  var session = TicketAuth.requireAuth();
+  if (!session) return;
+
+  /* ----- Thông tin người dùng + đăng xuất ----- */
+  var who = document.getElementById('who');
+  var role = session.user && session.user.role;
+  who.textContent = TicketAuth.displayName(session) + (role ? ' · ' + role : '');
+
+  document.getElementById('logout').addEventListener('click', function () {
+    TicketAuth.clearSession();
+    location.replace('index.html');
+  });
+
+  // Kiểm tra phiên định kỳ: token hết hạn thì quay về trang đăng nhập.
+  setInterval(function () {
+    if (!TicketAuth.hasValidSession()) TicketAuth.redirectToLogin();
+  }, 5000);
+
+  /* ----- Điều hướng (placeholder, theo phân quyền file 15 mục 0) ----- */
+  var navItems = [];
+  if (role === 'GATE_OPERATOR') {
+    navItems = ['Quét vé'];
+  } else if (role === 'EVENT_SUPERVISOR') {
+    navItems = ['Bảng giám sát', 'Quản trị vé', 'In vé'];
+  }
+  var nav = document.getElementById('nav');
+  navItems.forEach(function (label) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn nav-item';
+    b.textContent = label + ' (sắp có)';
+    b.disabled = true;
+    nav.appendChild(b);
+  });
+
+  /* ----- Chẩn đoán hệ thống (giữ từ trang cũ) ----- */
+  var INTERVAL_MS = 5000;
+
+  var PARTS = [
+    { id: 'api',   name: 'API',        note: 'Express, cổng 3000' },
+    { id: 'sql',   name: 'SQL Server', note: 'cổng 1433', keys: ['sqlserver', 'sql_server', 'sql', 'database', 'db'] },
+    { id: 'kafka', name: 'Kafka',      note: 'chế độ app không bật Kafka', keys: ['kafka'] }
+  ];
+
+  function toState(v) {
+    if (v === true) return 'ok';
+    if (v === false) return 'down';
+    if (typeof v === 'string') {
+      return /^(up|ok|connected|healthy|ready|true)$/i.test(v) ? 'ok' : 'down';
+    }
+    if (v && typeof v === 'object') {
+      if ('connected' in v) return toState(v.connected);
+      if ('ok' in v) return toState(v.ok);
+      if ('status' in v) return toState(v.status);
+    }
+    return 'unknown';
+  }
+
+  function pick(data, keys) {
+    var scopes = [data, data && data.services, data && data.checks, data && data.dependencies];
+    for (var i = 0; i < scopes.length; i++) {
+      var s = scopes[i];
+      if (!s || typeof s !== 'object') continue;
+      for (var j = 0; j < keys.length; j++) {
+        if (keys[j] in s) return s[keys[j]];
+      }
+    }
+    return undefined;
+  }
+
+  var LABEL = { ok: 'Đang chạy', down: 'Không kết nối', unknown: 'Chưa rõ' };
+
+  function render(states) {
+    var list = document.getElementById('list');
+    list.textContent = '';
+    PARTS.forEach(function (p) {
+      var st = states[p.id] || 'unknown';
+      var row = document.createElement('div');
+      row.className = 'row ' + st;
+
+      var dot = document.createElement('span'); dot.className = 'dot';
+      var box = document.createElement('div');
+      var name = document.createElement('div'); name.className = 'name'; name.textContent = p.name;
+      var note = document.createElement('div'); note.className = 'note'; note.textContent = p.note;
+      box.appendChild(name); box.appendChild(note);
+      var state = document.createElement('span'); state.className = 'state'; state.textContent = LABEL[st];
+
+      row.appendChild(dot); row.appendChild(box); row.appendChild(state);
+      list.appendChild(row);
+    });
+  }
+
+  function stamp() {
+    document.getElementById('when').textContent =
+      'Cập nhật lúc ' + new Date().toLocaleTimeString('vi-VN');
+  }
+
+  function check() {
+    var ctl = new AbortController();
+    var timer = setTimeout(function () { ctl.abort(); }, 4000);
+
+    fetch('/api/health', { cache: 'no-store', signal: ctl.signal })
+      .then(function (res) {
+        return res.json().catch(function () { return null; }).then(function (data) {
+          return { httpOk: res.ok, data: data };
+        });
+      })
+      .then(function (r) {
+        var states = { api: 'ok' };
+        PARTS.forEach(function (p) {
+          if (!p.keys) return;
+          states[p.id] = r.data ? toState(pick(r.data, p.keys)) : 'unknown';
+        });
+        render(states);
+      })
+      .catch(function () {
+        render({ api: 'down', sql: 'unknown', kafka: 'unknown' });
+      })
+      .then(function () { clearTimeout(timer); stamp(); });
+  }
+
+  document.getElementById('refresh').addEventListener('click', check);
+  check();
+  setInterval(check, INTERVAL_MS);
+})();
+</script>
+</body>
+</html>
