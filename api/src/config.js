@@ -6,6 +6,9 @@ process.env.TZ = 'Asia/Ho_Chi_Minh';
 
 module.exports = {
   apiPort: parseInt(process.env.API_PORT || '3000', 10),
+  jwtSecret: process.env.JWT_SECRET || 'default_secret',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '12h',
+  scanWaitMs: parseInt(process.env.SCAN_WAIT_MS || '3000', 10),
 
   db: {
     server: process.env.DB_HOST_INTERNAL || 'sqlserver',

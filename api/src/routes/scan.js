@@ -1,5 +1,6 @@
 'use strict';
 
+const { requireAuth, requireRole } = require('../middleware/auth');
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const kafka = require('../kafka');
@@ -19,7 +20,7 @@ function badRequest(res, details) {
   });
 }
 
-router.post('/', async (req, res, next) => {
+router.post('/', requireAuth, requireRole('GATE_OPERATOR'), async (req, res, next) => {
   try {
     const body = req.body || {};
     const details = [];
@@ -73,7 +74,7 @@ router.post('/', async (req, res, next) => {
 
     // operator_id: Task 3 chưa có auth → null.
     // Phase 5 khi có POST /api/login sẽ lấy từ token.sub (file 15 mục 2.1).
-    const operatorId = null;
+    const operatorId = req.user.sub; // Lấy user_id từ token
 
     const payload = {
       scan_event_id: scanEventId,

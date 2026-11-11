@@ -16,6 +16,8 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use('/api/health', require('./routes/health'));
+app.use('/api', require('./routes/auth'));
+app.use('/api', require('./routes/resources'));
 app.use('/api/scan', require('./routes/scan'));
 
 // 404 cho route /api/*
