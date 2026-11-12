@@ -104,6 +104,7 @@ IF OBJECT_ID(N'dbo.scan_event', N'U') IS NULL
 CREATE TABLE dbo.scan_event (
 
     scan_event_id                UNIQUEIDENTIFIER NOT NULL,
+    event_id                     NVARCHAR(20)     NOT NULL,
     ticket_id                    NVARCHAR(20)     NULL,
     scanner_id                   NVARCHAR(20)     NOT NULL,
     gate_id                      NVARCHAR(20)     NOT NULL,
@@ -135,6 +136,7 @@ CREATE TABLE dbo.scan_event (
     CONSTRAINT PK_scan_event PRIMARY KEY (scan_event_id),
     CONSTRAINT FK_scan_event_ticket   FOREIGN KEY (ticket_id)   REFERENCES dbo.ticket (ticket_id),
     CONSTRAINT FK_scan_event_gate     FOREIGN KEY (gate_id)     REFERENCES dbo.gate (gate_id),
+    CONSTRAINT FK_scan_event_event    FOREIGN KEY (event_id)    REFERENCES dbo.[event] (event_id),
     CONSTRAINT FK_scan_event_scanner  FOREIGN KEY (scanner_id, gate_id)
         REFERENCES dbo.scanner (scanner_id, gate_id),
     CONSTRAINT FK_scan_event_user     FOREIGN KEY (operator_id) REFERENCES dbo.app_user (user_id),
@@ -294,6 +296,107 @@ GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_gold_alert_event_created' AND object_id = OBJECT_ID(N'dbo.gold_alert'))
     CREATE INDEX IX_gold_alert_event_created ON dbo.gold_alert (event_id, created_at DESC);
+GO
+
+CREATE OR ALTER PROCEDURE dbo.usp_refresh_gold
+    @event_id NVARCHAR(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.[event] WHERE event_id = @event_id)
+        THROW 50001, N'usp_refresh_gold: event_id không tồn tại.', 1;
+
+    DECLARE @now DATETIME2(3) = DATEADD(HOUR, 7, SYSUTCDATETIME());
+    DECLARE @epoch DATETIME2(3) = '19000101';
+    DECLARE @lock_name NVARCHAR(255) = N'usp_refresh_gold:' + @event_id;
+    DECLARE @lock_result INT;
+
+    BEGIN TRANSACTION;
+
+    EXEC @lock_result = sp_getapplock
+        @Resource = @lock_name,
+        @LockMode = 'Exclusive',
+        @LockOwner = 'Transaction',
+        @LockTimeout = 15000;
+    IF @lock_result < 0
+        THROW 50002, N'usp_refresh_gold: không lấy được khóa, đợt khác đang tính.', 1;
+
+    DELETE FROM dbo.gold_gate_stats WHERE event_id = @event_id;
+
+    INSERT INTO dbo.gold_gate_stats
+        (event_id, gate_id, total_scans, cnt_valid, cnt_invalid, cnt_used, cnt_cancelled,
+         cnt_expired, cnt_wrong_gate, fraud_count, warning_count, last_scan_at, updated_at)
+    SELECT
+        s.event_id,
+        s.gate_id,
+        COUNT(*),
+        SUM(CASE WHEN s.scan_result = N'VALID'      THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.scan_result = N'INVALID'    THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.scan_result = N'USED'       THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.scan_result = N'CANCELLED'  THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.scan_result = N'EXPIRED'    THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.scan_result = N'WRONG_GATE' THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.alert_level = N'FRAUD'      THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.alert_level = N'WARNING'    THEN 1 ELSE 0 END),
+        MAX(s.received_at),
+        @now
+    FROM dbo.scan_event AS s
+    WHERE s.event_id = @event_id
+    GROUP BY s.event_id, s.gate_id;
+
+    DELETE FROM dbo.gold_event_stats WHERE event_id = @event_id;
+
+    INSERT INTO dbo.gold_event_stats
+        (event_id, bucket_start, total_scans, cnt_valid, cnt_invalid, cnt_used, cnt_cancelled,
+         cnt_expired, cnt_wrong_gate, fraud_count, warning_count, updated_at)
+    SELECT
+        s.event_id,
+        DATEADD(MINUTE, DATEDIFF(MINUTE, @epoch, s.received_at), @epoch),
+        COUNT(*),
+        SUM(CASE WHEN s.scan_result = N'VALID'      THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.scan_result = N'INVALID'    THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.scan_result = N'USED'       THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.scan_result = N'CANCELLED'  THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.scan_result = N'EXPIRED'    THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.scan_result = N'WRONG_GATE' THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.alert_level = N'FRAUD'      THEN 1 ELSE 0 END),
+        SUM(CASE WHEN s.alert_level = N'WARNING'    THEN 1 ELSE 0 END),
+        @now
+    FROM dbo.scan_event AS s
+    WHERE s.event_id = @event_id
+    GROUP BY s.event_id, DATEADD(MINUTE, DATEDIFF(MINUTE, @epoch, s.received_at), @epoch);
+
+    INSERT INTO dbo.gold_alert
+        (scan_event_id, event_id, created_at, received_at, alert_level, alert_code, scan_result,
+         ticket_id, gate_id, scanner_id, previous_scan_gate_id, time_since_previous_scan_ms,
+         min_travel_time_ms, ticket_assigned_gate_id, distinct_wrong_gate_count, raw_qr_preview)
+    SELECT
+        s.scan_event_id,
+        s.event_id,
+        COALESCE(fa.created_at, s.processing_ts),
+        s.received_at,
+        s.alert_level,
+        s.alert_code,
+        s.scan_result,
+        s.ticket_id,
+        s.gate_id,
+        s.scanner_id,
+        s.previous_scan_gate_id,
+        s.time_since_previous_scan_ms,
+        s.min_travel_time_ms,
+        s.ticket_assigned_gate_id,
+        s.distinct_wrong_gate_count,
+        CASE WHEN s.ticket_id IS NULL THEN LEFT(s.raw_qr_payload, 24) END
+    FROM dbo.scan_event AS s
+    LEFT JOIN dbo.fraud_alert AS fa ON fa.scan_event_id = s.scan_event_id
+    WHERE s.event_id = @event_id
+      AND s.alert_level <> N'NONE'
+      AND NOT EXISTS (SELECT 1 FROM dbo.gold_alert AS g WHERE g.scan_event_id = s.scan_event_id);
+
+    COMMIT TRANSACTION;
+END;
 GO
 
 PRINT N'init.sql: hoàn tất.';
