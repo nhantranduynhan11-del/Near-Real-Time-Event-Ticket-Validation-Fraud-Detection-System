@@ -3,10 +3,10 @@
    kiểm thử (file 10: "Trước mỗi ca, nạp lại dữ liệu mẫu về trạng thái
    ban đầu").
 
-   XÓA TOÀN BỘ lượt quét và cảnh báo, rồi trả trạng thái 7 vé mẫu về như
-   file 10. Chỉ chạy trên máy dev hoặc lúc demo, không chạy tự động.
-   Nhớ xóa cả Bronze (data/bronze/scan_events/) và checkpoint của Spark,
-   nếu không Spark sẽ nhớ các lượt quét cũ.
+   XÓA TOÀN BỘ lượt quét, cảnh báo và số liệu Gold, rồi trả trạng thái 7
+   vé mẫu về như file 10. Chỉ chạy trên máy dev hoặc lúc demo, không chạy
+   tự động.
+   
    ===================================================================== */
 
 USE ticket_system;
@@ -14,10 +14,14 @@ GO
 
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
+SET QUOTED_IDENTIFIER ON;
 BEGIN TRANSACTION;
 
+DELETE FROM dbo.gold_alert;   -- phải xóa trước fraud_alert và scan_event vì có khóa ngoại tới scan_event
 DELETE FROM dbo.fraud_alert;
 DELETE FROM dbo.scan_event;   -- một câu DELETE xóa hết, khóa ngoại tự tham chiếu không cản
+DELETE FROM dbo.gold_gate_stats;
+DELETE FROM dbo.gold_event_stats;
 
 UPDATE t
 SET    t.ticket_status = v.ticket_status
