@@ -14,6 +14,7 @@ Làm hết hướng dẫn này mất khoảng 10 đến 15 phút, phần lớn l
 | Python | 3.10 trở lên, dùng bản của Ubuntu (24.04: 3.12.3, 26.04: 3.14.3) | Cài thư viện trong môi trường ảo `.venv` |
 | PySpark (đã kèm Spark) | **4.1.3** (Scala 2.13, `py4j` tự cài kèm) | Ghim trong `spark/requirements.txt` |
 | Connector Kafka cho Spark | `org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.3` | **Không có sẵn** trong PySpark, tải lúc chạy job (`--packages`) |
+| Driver JDBC SQL Server | `com.microsoft.sqlserver:mssql-jdbc:12.8.1.jre11` | Job Silver dùng để ghi SQL Server. Tải lúc chạy như connector Kafka (`spark/sqlserver.py`) |
 | Kafka broker (Docker) | `apache/kafka:4.1.2` | Đã ghim trong `docker/kafka.service.yml` |
 
 Ba quy tắc:

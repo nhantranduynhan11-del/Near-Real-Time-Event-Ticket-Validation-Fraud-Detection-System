@@ -1,0 +1,88 @@
+/* =====================================================================
+   app.css — Style dùng chung cho giao diện Ticket Control.
+   Không lấy gì từ mạng; mọi tài nguyên (CSS/JS/biểu đồ/QR) đặt trong repo.
+   ===================================================================== */
+
+:root {
+  --bg: #f6f7f9; --card: #fff; --text: #1c2430; --muted: #6b7686; --line: #e3e7ee;
+  --ok: #1a9d55; --down: #d93b3b; --unknown: #9aa4b2;
+  --primary: #2563eb; --primary-ink: #fff;
+  --warn: #b45309;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161c; --card: #1b212b; --text: #e8ecf2; --muted: #93a0b2; --line: #2a3340;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 16px; margin: 0 0 4px; }
+.sub { color: var(--muted); margin: 0 0 20px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+
+.btn {
+  font: inherit; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--card); color: var(--text); cursor: pointer;
+}
+.btn:hover { border-color: var(--muted); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.btn-primary:hover { border-color: var(--primary); filter: brightness(1.06); }
+
+/* ----- Trang đăng nhập ----- */
+.login-page {
+  display: flex; min-height: 100vh; align-items: center; justify-content: center;
+  padding: 24px 16px;
+}
+.login-wrap { width: 100%; max-width: 360px; }
+.login-brand { text-align: center; margin-bottom: 20px; }
+.login-brand .sub { margin: 0; }
+.login-card { padding: 20px; }
+
+.field { display: block; margin-bottom: 14px; }
+.field span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.field input {
+  width: 100%; font: inherit; padding: 9px 10px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--card); color: var(--text);
+}
+.field input:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: var(--primary); }
+
+.form-error { color: var(--down); font-size: 13px; margin: 0 0 12px; }
+.mock-badge {
+  margin-top: 12px; padding: 6px 8px; border-radius: 6px; background: #fdf3e3;
+  color: var(--warn); font-size: 12px; text-align: center;
+}
+.hint { margin-top: 16px; text-align: center; color: var(--muted); font-size: 13px; }
+.hint code { background: var(--card); border: 1px solid var(--line); padding: 1px 5px; border-radius: 4px; }
+
+/* ----- Màn hình sau đăng nhập ----- */
+.topbar { background: var(--card); border-bottom: 1px solid var(--line); }
+.topbar-inner {
+  max-width: 760px; margin: 0 auto; padding: 12px 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.brand { font-weight: 700; }
+.app-main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+
+.nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.nav-item { flex: 1 1 auto; min-width: 120px; }
+.section { padding: 16px; }
+.section .sub { margin-bottom: 12px; }
+
+/* ----- Trạng thái hệ thống ----- */
+.row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.row + .row { border-top: 1px solid var(--line); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--unknown); flex: none; }
+.ok .dot { background: var(--ok); }
+.down .dot { background: var(--down); }
+.name { font-weight: 600; }
+.note { color: var(--muted); font-size: 13px; }
+.state { margin-left: auto; font-size: 13px; color: var(--muted); }
+.ok .state { color: var(--ok); }
+.down .state { color: var(--down); }
+.foot { display: flex; align-items: center; gap: 12px; margin-top: 14px; color: var(--muted); font-size: 13px; }
