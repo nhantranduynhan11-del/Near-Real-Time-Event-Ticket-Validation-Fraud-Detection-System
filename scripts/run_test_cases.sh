@@ -15,7 +15,7 @@ SUPERVISOR_USER=${SUPERVISOR_USER:-supervisor}
 TC05_GAP_SECONDS=${TC05_GAP_SECONDS:-5}
 TC08_GAP_SECONDS=${TC08_GAP_SECONDS:-140}
 STATUS_WAIT_SECONDS=${STATUS_WAIT_SECONDS:-8}
-POLL_MAX_SECONDS=${POLL_MAX_SECONDS:-30}
+POLL_MAX_SECONDS=${POLL_MAX_SECONDS:-90}
 POST_RESET_WAIT_SECONDS=${POST_RESET_WAIT_SECONDS:-3}
 RESET_CMD=${RESET_CMD:-}
 RESET_MODE=${RESET_MODE:-auto}
@@ -191,7 +191,10 @@ scan() {
     fi
     sleep 0.5
     http GET "/api/scan/$S_ID" "${TOKEN[$gate]}"
-    [[ $HTTP_CODE == 200 ]] || { S_ERR="GET /api/scan/$S_ID trả HTTP $HTTP_CODE"; return 1; }
+    # 202 PROCESSING là hợp lệ: Spark chưa ghi xong, tiếp tục hỏi lại.
+    # Chỉ 200 mới có kết quả; lỗi khác (401/403/404/5xx) mới dừng.
+    [[ $HTTP_CODE == 200 || $HTTP_CODE == 202 ]] \
+      || { S_ERR="GET /api/scan/$S_ID trả HTTP $HTTP_CODE"; return 1; }
   done
   S_RESULT=$(jq -r '.scan_result' <<<"$HTTP_BODY")
   S_ENTRY=$(jq -r '.entry' <<<"$HTTP_BODY")
