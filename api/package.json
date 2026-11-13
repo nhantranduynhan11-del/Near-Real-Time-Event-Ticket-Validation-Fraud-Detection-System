@@ -4,10 +4,13 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "test": "node test/qr.test.js && node test/time.test.js && node test/auth.test.js && node test/routes.test.js"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.3",
     "kafkajs": "^2.2.4",
     "mssql": "^11.0.1",
     "uuid": "^10.0.0"
