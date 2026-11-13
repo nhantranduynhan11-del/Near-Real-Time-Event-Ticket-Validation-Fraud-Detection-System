@@ -7,8 +7,12 @@ const express = require('express');
 const db = require('./db');
 const kafka = require('./kafka');
 const config = require('./config');
+const { errorHandler } = require('./errors');
+
+config.assertConfig();
 
 const app = express();
+app.disable('x-powered-by');
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -16,8 +20,11 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use('/api/health', require('./routes/health'));
-app.use('/api', require('./routes/auth'));
-app.use('/api', require('./routes/resources'));
+app.use('/api/login', require('./routes/login'));
+app.use('/api/tickets', require('./routes/tickets'));
+app.use('/api/gates', require('./routes/gates'));
+app.use('/api/scanners', require('./routes/scanners'));
+app.use('/api/events', require('./routes/events'));
 app.use('/api/scan', require('./routes/scan'));
 
 // 404 cho route /api/*
@@ -27,13 +34,8 @@ app.use('/api', (req, res) => {
   });
 });
 
-// Error handler chung
-app.use((err, req, res, next) => {
-  console.error('[error]', err);
-  res.status(500).json({
-    error: { code: 'INTERNAL_ERROR', message: 'Lỗi không lường trước.' },
-  });
-});
+// Error handler chung: ApiError, JSON hỏng, lỗi kết nối DB/Kafka, còn lại 500.
+app.use(errorHandler);
 
 const server = app.listen(config.apiPort, () => {
   console.log(`[api] listening on :${config.apiPort} (TZ=${process.env.TZ})`);

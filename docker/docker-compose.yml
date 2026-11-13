@@ -111,6 +111,9 @@ services:
       TZ: ${TZ}
       ACTIVE_EVENT_ID: ${ACTIVE_EVENT_ID}
       QR_HMAC_SECRET: ${QR_HMAC_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      SCAN_WAIT_MS: ${SCAN_WAIT_MS}
       FRAUD_CONFIG_PATH: ${FRAUD_CONFIG_PATH}
     depends_on:
       sqlserver:
