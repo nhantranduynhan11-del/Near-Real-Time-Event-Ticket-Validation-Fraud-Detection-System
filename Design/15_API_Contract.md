@@ -379,7 +379,7 @@ API chờ tối đa `SCAN_WAIT_MS` (mặc định 3000 ms, hỏi lại `scan_eve
 }
 ```
 
-Thiết bị **không gửi lại** `POST /scan`; nó hỏi `GET /api/scan/:scan_event_id` (2.2) cho tới khi có kết quả. Gửi lại sẽ tạo lượt quét thứ hai của cùng vé và bị coi là `USED` oan (xem 8.2).
+Thiết bị **không gửi lại** `POST /scan`; nó hỏi `GET /api/scan/:scan_event_id` (2.2) cho tới khi có kết quả. Gửi lại sẽ tạo lượt quét thứ hai của cùng vé và bị coi là `USED` oan.
 
 **Mã lỗi**
 
@@ -402,7 +402,7 @@ Thiết bị **không gửi lại** `POST /scan`; nó hỏi `GET /api/scan/:scan
 - **Bản tin lỗi:** Spark chuyển bản tin sai cấu trúc hoặc thiếu `scan_event_id`, `raw_qr_payload`, `received_at` sang `scan-events-dlq`, không ghi Bronze hay Silver (file 13, mục C.4). API luôn điền đủ ba trường này nên bản tin của API không được rơi vào đó.
 - API **không ghi** `scan_event`, `fraud_alert`; chỉ Spark ghi (file 11 mục 3, file 12 mục 5). API cũng **không tự kết luận** hợp lệ hay gian lận (điều cấm 3, file 11 mục 3), kể cả không tra vé; vì vậy nó không trả `404` cho vé lạ.
 - API không ghi Bronze; chỉ Spark ghi các tệp Parquet (file 11 mục 3).
-- Spark ghi `scan_event` và `fraud_alert` trong **cùng một giao dịch** (file 12 mục 5, file 13 mục C.3). Việc đổi `ticket_status` **không** được nói là nằm trong giao dịch đó, nên API không hứa rằng khi `POST /scan` trả kết quả thì `GET /tickets/:id` đã thấy trạng thái mới. Xem 8.9.
+- Spark ghi `scan_event`, `fraud_alert` **và đổi `ticket_status`** trong **cùng một giao dịch** (file 12 mục 5, file 13 mục C.3 và D.2). Vì vậy khi `POST /scan` đã đọc được dòng `scan_event` thì `GET /tickets/:id` chắc chắn thấy trạng thái mới. Gold được tính lại ngay sau giao dịch đó, nên dashboard có thể chậm hơn kết quả quét một chút.
 - Ở chế độ `app` của file 11 mục 7 không có Kafka và Spark: `POST /scan` trả `503 SERVICE_UNAVAILABLE`, đúng như thiết kế; các endpoint khác dùng bình thường.
 
 ### 2.2 `GET /api/scan/:scan_event_id` *(đề xuất thêm, ngoài danh sách đề bài)*
@@ -769,7 +769,9 @@ Ký hiệu: **R** đọc, **W** ghi (thêm hoặc sửa), **D** xóa. Cột ghi 
 
 Chia hai nhóm: **ảnh hưởng tới API ngay** (7.1–7.4) và **ghi nhận, chưa chặn MVP** (7.5–7.10).
 
-### 7.1 `scan_event` không có `event_id`
+### 7.1 `scan_event` không có `event_id` *(đã xử lý)*
+
+**Đã làm:** `init.sql` thêm `event_id NVARCHAR(20) NOT NULL` (khóa ngoại tới `event`); Spark ghi `ACTIVE_EVENT_ID` vào mọi lượt quét, kể cả `INVALID` (file 13, dòng 26 của phần B). Phần dưới giữ lại lý do.
 
 File 12 chủ ý bỏ vì "mỗi lần chạy chỉ phục vụ một sự kiện". File 11 mục 8 nói rõ hơn: cơ sở dữ liệu **có thể chứa nhiều sự kiện**, mỗi lần chạy chỉ phục vụ sự kiện `ACTIVE_EVENT_ID`, đổi sự kiện thì sửa biến rồi khởi động lại. Nghĩa là lượt quét của các lần chạy khác nhau cùng nằm trong một bảng `scan_event` và không cột nào phân biệt được. Hệ quả cho API:
 

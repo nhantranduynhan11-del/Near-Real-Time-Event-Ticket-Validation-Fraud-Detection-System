@@ -125,7 +125,8 @@ def run_all(spark):
     b = sc.scan("TK006", "GATE_A", ms("19:05:02"))
     r = sc.run()
     check("TC01 vé EV002 -> INVALID", r[a], scan_result="INVALID", alert_level="FRAUD",
-          alert_code="INVALID_QR", ticket_id=None, ticket_status_before=None, ticket_status_after=None)
+          alert_code="INVALID_QR", ticket_id=None, ticket_status_before=None, ticket_status_after=None,
+          event_id="EV001")
     check("TC02 vé đúng sự kiện ngay sau -> VALID", r[b], scan_result="VALID", alert_level="NONE",
           alert_code=None, ticket_status_before="UNUSED", ticket_status_after="VALID_ENTRY")
 
@@ -287,7 +288,8 @@ def run_all(spark):
     r = sc.run()
     rows, updates, rejected = build_writes(list(r.values()), ms("19:00:05"))
     by_id = {x["scan_event_id"]: x for x in rows}
-    check("Mỗi dòng đúng 21 cột", {"n": {len(x) for x in rows}}, n={21})
+    check("Mỗi dòng đúng 22 cột (21 cột file 08 + event_id)", {"n": {len(x) for x in rows}}, n={22})
+    check("event_id luôn là sự kiện đang chạy", {"e": {x["event_id"] for x in rows}}, e={"EV001"})
     check("Giờ ghi dạng giờ Việt Nam", by_id[a], received_at="2026-12-12T19:00:01.123",
           processing_ts="2026-12-12T19:00:05.000")
     got = sorted((u["ticket_id"], u["status_before"], u["status_after"]) for u in updates)

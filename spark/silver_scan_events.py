@@ -10,7 +10,7 @@ Mỗi micro-batch (foreachBatch) làm theo thứ tự:
    b. Đọc bảng tham chiếu: sự kiện đang chạy, số cổng, máy quét, nhân viên, thời gian đi bộ.
    c. Khóa (UPDLOCK) và đọc các vé có trong batch, cùng lượt VALID và các cổng sai đã có của chúng.
    d. Spark tính kết quả (silver_logic.compute_silver).
-   e. Ghi scan_event (21 cột), fraud_alert, đổi ticket_status. COMMIT.
+   e. Ghi scan_event (22 cột), fraud_alert, đổi ticket_status. COMMIT.
 3. Đẩy các bản tin bị loại sang DLQ.
 4. Gọi refresh_gold() của Role A (file 13, phần E).
 
@@ -90,6 +90,7 @@ SELECT (
 
 _SCAN_JSON_COLUMNS = """
     scan_event_id               UNIQUEIDENTIFIER,
+    event_id                    NVARCHAR(20),
     ticket_id                   NVARCHAR(20),
     scanner_id                  NVARCHAR(20),
     gate_id                     NVARCHAR(20),
@@ -111,14 +112,15 @@ _SCAN_JSON_COLUMNS = """
     ticket_assigned_gate_id     NVARCHAR(20),
     distinct_wrong_gate_count   INT
 """
-_SCAN_COLUMN_LIST = """scan_event_id, ticket_id, scanner_id, gate_id, operator_id, previous_scan_event_id,
-    raw_qr_payload, decode_error, scanned_at, received_at,
+_SCAN_COLUMN_LIST = """scan_event_id, event_id, ticket_id, scanner_id, gate_id, operator_id,
+    previous_scan_event_id, raw_qr_payload, decode_error, scanned_at, received_at,
     processing_ts, ticket_status_before, ticket_status_after, scan_result, alert_level, alert_code,
     previous_scan_gate_id, time_since_previous_scan_ms, min_travel_time_ms,
     ticket_assigned_gate_id, distinct_wrong_gate_count"""
 
-# Đúng 21 cột (file 13 mục C.1). Hai lượt: lượt USED trỏ (khóa ngoại tự tham chiếu) tới lượt VALID
-# có thể nằm cùng batch, nên ghi các dòng khác USED trước.
+# Đúng 22 cột: 21 cột của file 08 cộng event_id (file 13 mục C.1). Thiếu event_id thì SQL Server
+# báo lỗi 515 vì cột này NOT NULL. Hai lượt: lượt USED trỏ (khóa ngoại tự tham chiếu) tới lượt
+# VALID có thể nằm cùng batch, nên ghi các dòng khác USED trước.
 SQL_INSERT_SCAN = f"""
 INSERT INTO dbo.scan_event ({_SCAN_COLUMN_LIST})
 SELECT {_SCAN_COLUMN_LIST}
@@ -254,11 +256,22 @@ class SilverJob:
         """Gọi module Gold của A. Lỗi thì ghi log, để batch sau thử lại (Gold tính lại được)."""
         if self.gold_hook is None:
             return
+        started = time.time()
         try:
             self.gold_hook(self.db, self.active_event_id, batch_id)
             self._gold_pending = False
+            print(f"[gold] batch {batch_id}: đã tính lại Gold ({time.time() - started:.2f}s)", flush=True)
         except Exception as exc:  # noqa: BLE001 - Gold lỗi không được làm dừng Silver
-            print(f"[silver] refresh_gold lỗi, sẽ thử lại ở batch sau: {exc}", flush=True)
+            # Lỗi py4j kèm cả trang stack trace Java: chỉ in mã lỗi SQL và câu báo lỗi của Java
+            code = sql_error_code(exc)
+            je = getattr(exc, "java_exception", None)
+            try:
+                text = str(je.toString()) if je is not None else str(exc)
+            except Exception:  # noqa: BLE001
+                text = str(exc)
+            first = (text.strip().splitlines() or ["?"])[0][:300]
+            print(f"[gold] batch {batch_id}: refresh_gold lỗi (SQL {code}): {first}. "
+                  f"Sẽ thử lại ở batch sau.", flush=True)
             self._gold_pending = True
 
     # ---------- Thử lại và cô lập bản tin độc ----------

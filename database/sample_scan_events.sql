@@ -1,3 +1,10 @@
+/* =====================================================================
+   sample_scan_events.sql — 8 lượt quét mẫu đủ 6 loại kết quả, để C và D thử API, giao diện
+   và Gold khi chưa có Spark.
+   Script đổi luôn trạng thái vé cho khớp lịch sử quét (TK001 FLAGGED_FRAUD, TK007 VALID_ENTRY),
+   giống như Spark làm, để quét thật tiếp sau đó vẫn ra đúng (TK001 phải ra USED).
+   KHÔNG nạp vào DB đang dùng chạy run_test_cases.sh: chạy reset_test_data.sql trước khi test.
+   ===================================================================== */
 USE ticket_system;
 GO
 
@@ -23,9 +30,11 @@ BEGIN
      ('B0000000-0000-0000-0000-000000000002', N'EV001', N'TK001', N'SC_A1', N'GATE_A', N'OP_A', 'B0000000-0000-0000-0000-000000000001',
       N'TK001', 0, '2026-12-12T18:05:39.500', '2026-12-12T18:05:40.000', '2026-12-12T18:05:40.200',
       N'VALID_ENTRY', N'FLAGGED_FRAUD', N'USED', N'FRAUD', N'DUPLICATE_SCAN', N'GATE_A', 30000, NULL, NULL, NULL),
-     ('B0000000-0000-0000-0000-000000000003', N'EV001', N'TK001', N'SC_D1', N'GATE_D', N'OP_D', 'B0000000-0000-0000-0000-000000000002',
+     -- previous_scan_event_id trỏ về lượt VALID duy nhất của vé (quy ước của Spark, file 13 mục D.6);
+     -- khoảng cách 18:05:10 -> 18:06:05 = 55 000 ms < 140 000 ms (A-D) nên ra IMPOSSIBLE_TRAVEL
+     ('B0000000-0000-0000-0000-000000000003', N'EV001', N'TK001', N'SC_D1', N'GATE_D', N'OP_D', 'B0000000-0000-0000-0000-000000000001',
       N'TK001', 0, '2026-12-12T18:06:04.500', '2026-12-12T18:06:05.000', '2026-12-12T18:06:05.200',
-      N'FLAGGED_FRAUD', N'FLAGGED_FRAUD', N'USED', N'FRAUD', N'IMPOSSIBLE_TRAVEL', N'GATE_A', 25000, 140000, NULL, NULL),
+      N'FLAGGED_FRAUD', N'FLAGGED_FRAUD', N'USED', N'FRAUD', N'IMPOSSIBLE_TRAVEL', N'GATE_A', 55000, 140000, NULL, NULL),
      ('B0000000-0000-0000-0000-000000000004', N'EV001', N'TK002', N'SC_C1', N'GATE_C', N'OP_C', NULL,
       N'TK002', 0, '2026-12-12T18:06:19.500', '2026-12-12T18:06:20.000', '2026-12-12T18:06:20.200',
       N'UNUSED', N'UNUSED', N'WRONG_GATE', N'WARNING', N'WRONG_GATE_WARNING', NULL, NULL, NULL, N'GATE_B', 1),
@@ -49,6 +58,12 @@ BEGIN
      ('B0000000-0000-0000-0000-000000000004', N'WRONG_GATE_WARNING', N'WARNING', '2026-12-12T18:06:20.300'),
      ('B0000000-0000-0000-0000-000000000005', N'REVOKED_TICKET',     N'FRAUD',   '2026-12-12T18:06:40.300'),
      ('B0000000-0000-0000-0000-000000000006', N'INVALID_QR',         N'FRAUD',   '2026-12-12T18:06:45.300');
+
+    -- Trạng thái vé theo ticket_status_after của lượt quét cuối mỗi vé (file 06)
+    UPDATE dbo.ticket SET ticket_status = N'FLAGGED_FRAUD'
+    WHERE ticket_id = N'TK001' AND ticket_status = N'UNUSED';
+    UPDATE dbo.ticket SET ticket_status = N'VALID_ENTRY'
+    WHERE ticket_id = N'TK007' AND ticket_status = N'UNUSED';
 
     COMMIT TRANSACTION;
     PRINT N'Đã nạp 8 lượt quét mẫu và 5 cảnh báo.';

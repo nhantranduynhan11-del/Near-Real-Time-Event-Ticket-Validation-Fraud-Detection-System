@@ -64,8 +64,8 @@ vì Gold chỉ ghi dòng khi có ít nhất 1 lượt quét trong phút đó —
 ### 1.3 `gold_alert` — một dòng mỗi cảnh báo (append-only, không tổng hợp)
 
 Mirror chi tiết của `fraud_alert` + các cột `scan_event` cần hiển thị, để API không phải đọc Silver.
-Spark ghi đúng 1 lần ngay khi xử lý xong lượt quét có `alert_level <> 'NONE'`, cùng lúc với
-`scan_event`/`fraud_alert` (cùng giao dịch) — không update lại sau đó.
+`dbo.usp_refresh_gold` thêm 1 dòng cho mỗi lượt quét có `alert_level <> 'NONE'` chưa có trong bảng,
+ngay sau khi đợt Silver chứa lượt đó đã COMMIT (mục 3). Dòng đã có thì không sửa lại.
 
 | Cột | Kiểu | NULL | Ràng buộc / Ghi chú |
 |---|---|---|---|
@@ -121,11 +121,17 @@ các trường không áp dụng theo `scan_result`, không tin thẳng giá tr�
 
 ---
 
-## 3. Chu kỳ cập nhật Gold (Spark ghi)
+## 3. Chu kỳ cập nhật Gold (Spark gọi `dbo.usp_refresh_gold`)
 
-Cả 3 bảng được Spark `MERGE`/`INSERT` ngay sau mỗi micro-batch xử lý xong:
+Sau mỗi micro-batch Silver đã COMMIT, và một lần lúc pipeline khởi động, `spark/gold.py` gọi
+`EXEC dbo.usp_refresh_gold @event_id = ACTIVE_EVENT_ID` (thỏa thuận ở file 13 phần E). Thủ tục
+**tính lại từ `scan_event`**, không cộng dồn, nên Spark gọi lại sau khi khởi động lại cũng không
+đếm trùng:
 
-- `gold_gate_stats`: `MERGE` cộng dồn vào dòng `(event_id, gate_id)` đã có.
-- `gold_event_stats`: `MERGE` cộng dồn vào dòng `(event_id, bucket_start)` của phút tương ứng;
-  phút mới thì `INSERT` dòng mới.
-- `gold_alert`: `INSERT` thêm 1 dòng mỗi lượt quét có `alert_level <> 'NONE'` trong batch, không update.
+- `gold_gate_stats`: xóa các dòng của sự kiện rồi tính lại theo `(event_id, gate_id)`.
+- `gold_event_stats`: xóa các dòng của sự kiện rồi tính lại theo `(event_id, bucket_start)`, bucket 1 phút.
+- `gold_alert`: chỉ `INSERT` cảnh báo chưa có (`NOT EXISTS`), không sửa dòng cũ.
+
+Thủ tục tự mở giao dịch và khóa `sp_getapplock` theo `event_id`, nên hai lần gọi không chồng nhau.
+Gold chậm hơn Silver đúng thời gian một lần gọi thủ tục. Kiểm tra Gold khớp Silver: mục 5–7 của
+`database/check.sql`.

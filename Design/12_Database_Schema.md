@@ -114,9 +114,9 @@ NOT NULL: username, password_hash, last_name, first_name, role
 CHECK: role IN ('GATE_OPERATOR', 'EVENT_SUPERVISOR')  
 Ghi chú: chuyên biệt hóa rời nhau và toàn phần, gộp lớp cha và hai lớp con bằng cột `role`; `full_name` tách thành `last_name`, `first_name`
 
-**SCAN_EVENT** (<ins>scan_event_id</ins>, *ticket_id*, *scanner_id*, *gate_id*, *operator_id*, *previous_scan_event_id*, raw_qr_payload, decode_error, scanned_at, received_at, processing_ts, ticket_status_before, ticket_status_after, scan_result, alert_level, alert_code, previous_scan_gate_id, time_since_previous_scan_ms, min_travel_time_ms, ticket_assigned_gate_id, distinct_wrong_gate_count, is_wrong_gate, is_duplicate, fraud_alert, ingestion_lag_ms)  
-Foreign key: ticket_id *to* TICKET.ticket_id (OF_TICKET); gate_id *to* GATE.gate_id (AT_GATE); (scanner_id, gate_id) *to* SCANNER.(scanner_id, gate_id) (ON_SCANNER); operator_id *to* APP_USER.user_id (PERFORMS); previous_scan_event_id *to* SCAN_EVENT.scan_event_id (PREVIOUS_OF, đệ quy)  
-NOT NULL: scanner_id, gate_id, raw_qr_payload, decode_error, scanned_at, received_at, processing_ts, scan_result, alert_level  
+**SCAN_EVENT** (<ins>scan_event_id</ins>, *event_id*, *ticket_id*, *scanner_id*, *gate_id*, *operator_id*, *previous_scan_event_id*, raw_qr_payload, decode_error, scanned_at, received_at, processing_ts, ticket_status_before, ticket_status_after, scan_result, alert_level, alert_code, previous_scan_gate_id, time_since_previous_scan_ms, min_travel_time_ms, ticket_assigned_gate_id, distinct_wrong_gate_count, is_wrong_gate, is_duplicate, fraud_alert, ingestion_lag_ms)  
+Foreign key: event_id *to* EVENT.event_id (IN_EVENT); ticket_id *to* TICKET.ticket_id (OF_TICKET); gate_id *to* GATE.gate_id (AT_GATE); (scanner_id, gate_id) *to* SCANNER.(scanner_id, gate_id) (ON_SCANNER); operator_id *to* APP_USER.user_id (PERFORMS); previous_scan_event_id *to* SCAN_EVENT.scan_event_id (PREVIOUS_OF, đệ quy)  
+NOT NULL: event_id, scanner_id, gate_id, raw_qr_payload, decode_error, scanned_at, received_at, processing_ts, scan_result, alert_level  
 NULL được phép: ticket_id, operator_id, previous_scan_event_id và các trường điều kiện của file 08  
 CHECK: scan_result IN ('VALID', 'INVALID', 'USED', 'CANCELLED', 'EXPIRED', 'WRONG_GATE'); alert_level IN ('NONE', 'WARNING', 'FRAUD'); alert_code IS NULL hoặc thuộc sáu mã cảnh báo  
 CHECK: processing_ts >= received_at; previous_scan_event_id <> scan_event_id; decode_error = 1 thì ticket_id IS NULL  
@@ -211,6 +211,7 @@ Khóa và khóa ngoại:
 | Cột | Kiểu | NULL | Mặc định | Ràng buộc, ghi chú |
 |---|---|---|---|---|
 | scan_event_id | UNIQUEIDENTIFIER | Không | | PK_scan_event. Chống ghi trùng khi Spark đọc lại cùng một bản tin từ Kafka |
+| event_id | NVARCHAR(20) | Không | | FK_scan_event_event → EVENT. Sự kiện đang chạy (`ACTIVE_EVENT_ID`) lúc quét, Spark ghi cho mọi lượt kể cả `INVALID`. Thêm theo đề xuất ở file 15 mục 7.1, để Gold và tra cứu lọc được theo sự kiện |
 | ticket_id | NVARCHAR(20) | Có | | FK_scan_event_ticket → TICKET. NULL khi QR hỏng **hoặc mã vé không có trong DB**; mã gốc vẫn nằm trong `raw_qr_payload` và tầng Bronze |
 | gate_id | NVARCHAR(20) | Không | | FK_scan_event_gate → GATE |
 | scanner_id | NVARCHAR(20) | Không | | FK_scan_event_scanner: (scanner_id, gate_id) → SCANNER |

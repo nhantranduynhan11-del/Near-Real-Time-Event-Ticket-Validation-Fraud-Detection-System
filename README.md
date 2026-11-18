@@ -31,11 +31,18 @@ cd ~
 git clone https://github.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System.git ticket-control
 cd ticket-control
 cp docker/.env.example docker/.env
-nano docker/.env.example 
+nano docker/.env
 ```
-Mở `docker/.env`, điền `DB_PASSWORD`.
+Trong `docker/.env` (KHÔNG sửa `docker/.env.example`, tệp đó được commit lên GitHub), điền:
+
+- `DB_PASSWORD`: mật khẩu `sa` của SQL Server, có chữ hoa, chữ thường, số và ký tự đặc biệt.
+- `QR_HMAC_SECRET` và `JWT_SECRET`: mỗi biến một chuỗi sinh bằng `openssl rand -hex 32`. Cả nhóm dùng **chung** một `QR_HMAC_SECRET` thì mã QR in ở máy này mới quét được ở máy kia.
+
 `Ctrl + o` sau đó enter để lưu sau khi nhập.
-`Ctrl + x` để thoát
+`Ctrl + x` để thoát.
+
+Đổi cấu trúc bảng (vd. sau khi kéo `init.sql` mới) thì phải dựng lại DB, mất dữ liệu cũ:
+`docker compose -f docker/docker-compose.yml --env-file docker/.env --profile full down -v`, rồi `./scripts/up.sh full`.
 
 ## 3. Cài môi trường Spark (một lần)
 

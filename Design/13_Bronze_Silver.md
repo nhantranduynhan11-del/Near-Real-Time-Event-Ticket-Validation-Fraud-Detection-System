@@ -58,7 +58,7 @@ Dữ liệu tại tầng Bronze bảo toàn nguyên vẹn 9 trường Input từ
 
 ## Phần B. Đối chiếu tầng Silver (Bảng `SCAN_EVENT`)
 
-Tầng Silver nhận dữ liệu từ Kafka, Spark tính toán áp dụng luật nghiệp vụ (phát hiện gian lận, trừ thời gian, chuyển trạng thái vé) rồi ghi vào bảng `SCAN_EVENT` trên SQL Server. Bảng này có tổng cộng 25 cột.
+Tầng Silver nhận dữ liệu từ Kafka, Spark tính toán áp dụng luật nghiệp vụ (phát hiện gian lận, trừ thời gian, chuyển trạng thái vé) rồi ghi vào bảng `SCAN_EVENT` trên SQL Server. Bảng này có tổng cộng 26 cột: 25 cột ứng với 25 trường của file 08, cộng `event_id` (sự kiện đang chạy) do A thêm ở `init.sql`.
 
 Bảng dưới đây ánh xạ 1-1 từng trường của sự kiện với từng cột trong DB, phân rõ trách nhiệm sinh dữ liệu thuộc về luồng nào: **Chép nguyên**, **Spark tính ra**, hay **SQL Server tự tính**.
 
@@ -89,15 +89,16 @@ Bảng dưới đây ánh xạ 1-1 từng trường của sự kiện với từ
 | **23**| `is_wrong_gate` | `is_wrong_gate` (PERSISTED) | **SQL Server tự tính** | Cột tính toán lưu trữ. Công thức SQL: `CAST(CASE WHEN scan_result = 'WRONG_GATE' THEN 1 ELSE 0 END AS BIT)`. |
 | **24**| `fraud_alert` | `fraud_alert` (PERSISTED) | **SQL Server tự tính** | Cột tính toán lưu trữ. Công thức SQL: `CAST(CASE WHEN alert_level = 'FRAUD' THEN 1 ELSE 0 END AS BIT)`. Dùng để thống kê gian lận thật trên Dashboard. |
 | **25**| `ingestion_lag_ms` | `ingestion_lag_ms` (PERSISTED) | **SQL Server tự tính** | Cột đo độ trễ pipeline. Công thức SQL: `DATEDIFF(MILLISECOND, received_at, processing_ts)`. |
+| **26**| (không có trong file 08) | `event_id` (FK, NOT NULL) | **Spark tính ra** | Luôn là `ACTIVE_EVENT_ID`, kể cả lượt `INVALID` (vé giả, vé của sự kiện khác): lượt quét thuộc sự kiện đang chạy. Gold lọc theo cột này (`usp_refresh_gold`). Thiếu cột này thì `INSERT` bị lỗi 515. |
 
 ---
 
 ## Phần C. Quy tắc tích hợp tầng Pipeline (Implementation Rules)
 
 1. **Giới hạn số cột khi ghi JDBC:**
-   - Bảng `SCAN_EVENT` có tổng cộng **25 cột**.
+   - Bảng `SCAN_EVENT` có tổng cộng **26 cột**.
    - Có **4 cột tự tính bởi SQL Server** (`is_wrong_gate`, `is_duplicate`, `fraud_alert`, `ingestion_lag_ms`) được định nghĩa là **Computed PERSISTED Columns** ở cấp độ Database.
-   - Do đó, câu ghi của Spark **tuyệt đối chỉ liệt kê 21 cột**. Bất kỳ nỗ lực nào chèn giá trị (kể cả truyền `NULL`) vào 4 cột tính toán này sẽ khiến SQL Server ném lỗi từ chối Transaction ngay lập tức.
+   - Do đó, câu ghi của Spark **tuyệt đối chỉ liệt kê 22 cột** (21 cột của file 08 cộng `event_id`). Bất kỳ nỗ lực nào chèn giá trị (kể cả truyền `NULL`) vào 4 cột tính toán này sẽ khiến SQL Server ném lỗi từ chối Transaction ngay lập tức.
    - Spark **không** dùng `df.write.jdbc`: mỗi lần gọi là một kết nối và một giao dịch riêng, nên không ghi được `scan_event`, `fraud_alert` và `ticket` trong cùng một giao dịch như mục 3. Driver Spark tự mở một kết nối JDBC và ghi bằng `INSERT … SELECT … FROM OPENJSON(?)`. Cả batch là một tham số JSON nên không ghép chuỗi SQL. Chi tiết ở phần D.
 2. **Xử lý toàn vẹn dữ liệu ngoại lệ cho `ticket_id`:**
    - Trong bản tin thô Bronze, `ticket_id` có thể chứa mã vé không tồn tại trong DB, vé của sự kiện khác, hoặc bị lỗi giải mã do đọc QR hỏng.
@@ -134,7 +135,7 @@ Bảng dưới đây ánh xạ 1-1 từng trường của sự kiện với từ
 | `spark/silver_scan_events.py` | Việc của một micro-batch Silver: kiểm tra bản tin, giao dịch SQL Server, DLQ, gọi Gold |
 | `spark/silver_logic.py` | Luật nghiệp vụ (6 bước của file 07, trạng thái vé của file 06, R1–R4 của file 09) viết bằng DataFrame, không đụng Kafka hay DB |
 | `spark/sqlserver.py` | Kết nối JDBC tự quản giao dịch. Driver `mssql-jdbc` nạp qua `spark.jars.packages`, giống connector Kafka |
-| `spark/gold.py` | Chỗ nối sang Gold (phần E), Role A viết thân hàm |
+| `spark/gold.py` | Chỗ nối sang Gold (phần E): gọi thủ tục `dbo.usp_refresh_gold` của Role A |
 | `spark/run_pipeline.sh` | Chạy pipeline bằng `.venv` và Java 21. `scripts/up.sh stream` gọi tệp này |
 
 ### D.2 Một micro-batch Silver làm gì
@@ -151,7 +152,7 @@ sequenceDiagram
     S->>DB: event, event_gate, scanner, app_user, gate_travel_time
     S->>DB: ticket WITH (UPDLOCK, HOLDLOCK) + lượt VALID và cổng sai đã có
     S->>S: compute_silver(): 6 bước, trạng thái vé, cảnh báo
-    S->>DB: INSERT scan_event (21 cột), INSERT fraud_alert, UPDATE ticket
+    S->>DB: INSERT scan_event (22 cột), INSERT fraud_alert, UPDATE ticket
     S->>DB: COMMIT
     S->>K: bản tin bị loại -> scan-events-dlq
     S->>DB: refresh_gold() (phần E)
@@ -207,14 +208,13 @@ Thử trước ngày demo: CHECK `processing_ts >= received_at` không cho ghi l
 |---|---|
 | Ai gọi | Job Silver gọi `refresh_gold(db, event_id, batch_id)` trong `spark/gold.py` |
 | Khi nào | Ngay sau mỗi micro-batch Silver đã COMMIT. Thêm một lần lúc pipeline khởi động (`batch_id = None`). Batch rỗng chỉ gọi nếu lần trước Gold lỗi |
-| Ai viết | Role A viết thân hàm. Role B không viết logic Gold |
+| Ai viết | Role A viết logic Gold trong thủ tục `dbo.usp_refresh_gold` (`database/init.sql`). `refresh_gold()` chỉ gọi thủ tục đó |
 | Đầu vào | Chỉ đọc `scan_event` (và `fraud_alert`, `event`, `event_gate`). `event_id = ACTIVE_EVENT_ID`. `scan_event` không có cột `event_id` nên mọi dòng đều tính cho sự kiện đang chạy (file 15 mục 7.1) |
 | Cách tính | **Tính lại** cả 3 bảng của file 14 từ Silver, không cộng dồn. Gọi hai lần liên tiếp ra cùng kết quả. Spark có thể gọi lại sau khi khởi động lại hoặc sau một batch đã ghi rồi, nên cộng dồn sẽ đếm trùng |
-| Giao dịch | Hàm tự mở: `with db.transaction(): db.execute(sql, tham_so_chuoi, …)`. Kết nối dùng chung với Silver, mọi tham số là chuỗi `NVARCHAR` |
+| Giao dịch | Thủ tục tự `BEGIN`/`COMMIT` và tự khóa bằng `sp_getapplock`. Spark gọi nó ở chế độ tự commit (`SqlServer.execute_autocommit`), sau COMMIT của Silver: kết nối thường chạy `autoCommit=false` (`IMPLICIT_TRANSACTIONS ON`), gọi thủ tục trong đó thì số giao dịch lúc ra lệch lúc vào và SQL Server báo lỗi 266 |
 | Lỗi | Hàm ném lỗi thì Silver ghi log rồi gọi lại ở batch sau. Silver **không** dừng vì Gold. Silver đã COMMIT trước nên không mất gì |
 | Độ trễ | Gold chậm hơn Silver đúng thời gian một lần `refresh_gold`. `POST /scan` của API đọc `scan_event` (Silver), không đọc Gold, nên không bị ảnh hưởng |
 
-Cần sửa ở chỗ khác cho khớp thỏa thuận (việc của A):
+Đã làm cho khớp: file 14 mục 1.3 và 3 ghi Gold được tính lại sau COMMIT; `database/reset_test_data.sql` xóa `gold_alert` trước `scan_event`; `database/check.sql` mục 5–7 đối chiếu Gold với Silver; `database/test_usp_refresh_gold.sql` thử thủ tục trên dữ liệu riêng.
 
-- File 14 mục 3 đang ghi "MERGE cộng dồn" và mục 1.3 ghi `gold_alert` nằm cùng giao dịch với `scan_event`. Theo thỏa thuận này thì `gold_alert` do `refresh_gold()` bù ngay sau COMMIT, và cả 3 bảng được tính lại.
-- `database/reset_test_data.sql` phải xóa `gold_alert` **trước** `scan_event` (có `FK_gold_alert_scan_event`), và xóa luôn `gold_gate_stats`, `gold_event_stats`.
+DB dựng từ `init.sql` cũ (chưa có thủ tục) thì `refresh_gold()` báo một lần rồi bỏ qua Gold. Dựng lại DB bằng `docker compose ... --profile full down -v`.

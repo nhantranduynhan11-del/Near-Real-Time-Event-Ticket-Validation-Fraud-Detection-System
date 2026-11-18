@@ -91,6 +91,13 @@ expect "Vé có lượt VALID mà chưa VALID_ENTRY/FLAGGED_FRAUD, hoặc ngư�
   WHERE CASE WHEN EXISTS (SELECT 1 FROM dbo.scan_event s WHERE s.ticket_id = t.ticket_id AND s.scan_result = N'VALID')
              THEN 1 ELSE 0 END
      <> CASE WHEN t.ticket_status IN (N'VALID_ENTRY', N'FLAGGED_FRAUD') THEN 1 ELSE 0 END;")" "0"
+expect "Gold khớp Silver: tổng theo cổng, theo phút, số cảnh báo" "$(sql "
+  SELECT CONCAT(
+    (SELECT ISNULL(SUM(total_scans), 0) FROM dbo.gold_gate_stats  WHERE event_id = N'$ACTIVE_EVENT_ID'), '/',
+    (SELECT ISNULL(SUM(total_scans), 0) FROM dbo.gold_event_stats WHERE event_id = N'$ACTIVE_EVENT_ID'), '/',
+    (SELECT COUNT(*) FROM dbo.gold_alert WHERE event_id = N'$ACTIVE_EVENT_ID'));")" "$(sql "
+  SELECT CONCAT((SELECT COUNT(*) FROM dbo.scan_event), '/', (SELECT COUNT(*) FROM dbo.scan_event), '/',
+                (SELECT COUNT(*) FROM dbo.scan_event WHERE alert_level <> N'NONE'));")"
 expect "Vé có lượt USED mà chưa FLAGGED_FRAUD" "$(sql "
   SELECT COUNT(*) FROM dbo.ticket t
   WHERE t.ticket_status <> N'FLAGGED_FRAUD'

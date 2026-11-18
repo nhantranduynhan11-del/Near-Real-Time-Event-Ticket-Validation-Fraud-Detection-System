@@ -2,7 +2,10 @@
 # Chạy TC01-TC08 (Requirements/10_Test_Cases.md) qua API, mỗi ca reset trước, in bảng đạt/không đạt.
 # Dùng:  scripts/run_test_cases.sh            chạy cả 8 ca
 #        scripts/run_test_cases.sh TC07 TC08  chạy riêng một vài ca
-#        RESET_MODE=sql scripts/run_test_cases.sh   mỗi ca chỉ reset SQL Server, không chạy scripts/reset.sh
+#        RESET_MODE=full scripts/run_test_cases.sh  mỗi ca chạy scripts/reset.sh -y rồi bật lại Spark (chậm)
+# Mặc định (RESET_MODE=sql) mỗi ca chỉ reset SQL Server bằng database/reset_test_data.sql: Spark vẫn
+# chạy, các bản tin cũ trong Kafka đã nằm sau checkpoint nên không bị xử lý lại.
+# Không dùng thẳng scripts/reset.sh: nó hỏi xác nhận (đọc /dev/null thì thoát mã 1) và tắt Spark.
 # Cần: curl, jq, GNU date. Hệ thống phải đang chạy chế độ full (API + Kafka + Spark + SQL Server).
 set -uo pipefail
 
@@ -18,7 +21,7 @@ STATUS_WAIT_SECONDS=${STATUS_WAIT_SECONDS:-8}
 POLL_MAX_SECONDS=${POLL_MAX_SECONDS:-90}
 POST_RESET_WAIT_SECONDS=${POST_RESET_WAIT_SECONDS:-3}
 RESET_CMD=${RESET_CMD:-}
-RESET_MODE=${RESET_MODE:-auto}
+RESET_MODE=${RESET_MODE:-sql}
 SKIP_RESET=${SKIP_RESET:-0}
 
 declare -A GATE_USER=([GATE_A]=op_gate_a [GATE_B]=op_gate_b [GATE_C]=op_gate_c [GATE_D]=op_gate_d)
@@ -136,22 +139,26 @@ restore_window() {
 }
 
 sql_reset() {
-  local compose="$ROOT/docker/docker-compose.yml"
-  [[ -f $compose ]] || compose="$ROOT/docker-compose.yml"
-  docker compose -f "$compose" exec -T sqlserver bash -c \
+  # COMPOSE_PROFILES: mọi service trong docker-compose.yml đều có profile, thiếu thì `compose exec`
+  # không thấy sqlserver. --env-file: để compose đọc được biến (giống scripts/reset.sh).
+  COMPOSE_PROFILES=full docker compose -f "$ROOT/docker/docker-compose.yml" --env-file "$ROOT/docker/.env" \
+    exec -T sqlserver bash -c \
     '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -I -b -d ticket_system' \
     < "$ROOT/database/reset_test_data.sql"
 }
 
-# Thứ tự ưu tiên: RESET_CMD (tự đặt) > RESET_MODE=sql (chỉ reset SQL Server) > scripts/reset.sh > chỉ reset SQL Server.
+# reset.sh tắt Spark và xóa checkpoint, nên phải bật lại Spark ngay sau đó
+full_reset() {
+  "$ROOT/scripts/reset.sh" -y </dev/null && "$ROOT/scripts/up.sh" full </dev/null
+}
+
+# Thứ tự ưu tiên: RESET_CMD (tự đặt) > RESET_MODE=full (reset.sh -y + bật lại Spark) > RESET_MODE=sql (mặc định).
 reset_state() {
   local out rc=0
   if [[ -n $RESET_CMD ]]; then
     out=$(bash -c "$RESET_CMD" 2>&1 </dev/null) || rc=$?
-  elif [[ $RESET_MODE == sql ]]; then
-    out=$(sql_reset 2>&1) || rc=$?
-  elif [[ -x $ROOT/scripts/reset.sh ]]; then
-    out=$("$ROOT/scripts/reset.sh" 2>&1 </dev/null) || rc=$?
+  elif [[ $RESET_MODE == full ]]; then
+    out=$(full_reset 2>&1) || rc=$?
   else
     out=$(sql_reset 2>&1) || rc=$?
   fi

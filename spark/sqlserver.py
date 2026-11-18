@@ -117,6 +117,28 @@ class SqlServer:
         finally:
             ps.close()
 
+    def execute_autocommit(self, sql, *params):
+        """Chạy một câu (thường là EXEC thủ tục) ở chế độ tự commit, NGOÀI giao dịch của Silver.
+
+        Dùng cho thủ tục tự BEGIN/COMMIT như dbo.usp_refresh_gold. Kết nối thường chạy
+        autoCommit=false (IMPLICIT_TRANSACTIONS ON); khi đó câu SELECT đầu tiên trong thủ tục mở
+        một giao dịch ngầm, số giao dịch lúc thoát lệch lúc vào và SQL Server báo lỗi 266.
+        Chỉ gọi khi không có giao dịch nào đang mở (sau COMMIT của Silver).
+        """
+        conn = self.connect()
+        conn.setAutoCommit(True)
+        try:
+            ps = self._prepare(sql, params)
+            try:
+                ps.execute()
+            finally:
+                ps.close()
+        finally:
+            try:
+                conn.setAutoCommit(False)
+            except Exception:  # noqa: BLE001 - kết nối hỏng thì mở lại ở lần sau
+                self.close()
+
     def execute(self, sql, *params):
         """Chạy INSERT/UPDATE/DELETE. Trả số dòng bị ảnh hưởng."""
         ps = self._prepare(sql, params)

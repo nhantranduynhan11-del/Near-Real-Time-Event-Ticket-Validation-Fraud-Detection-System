@@ -102,6 +102,14 @@ expect "Trạng thái 7 vé" \
   "TK001=FLAGGED_FRAUD TK002=FLAGGED_FRAUD TK003=CANCELLED TK004=FLAGGED_FRAUD TK005=UNUSED TK006=UNUSED TK007=VALID_ENTRY"
 expect "Số dòng scan_event / fraud_alert" \
   "$(sql "SELECT CONCAT((SELECT COUNT(*) FROM dbo.scan_event), '/', (SELECT COUNT(*) FROM dbo.fraud_alert));")" "18/13"
+expect "Mọi lượt quét mang event_id của sự kiện đang chạy" \
+  "$(sql "SELECT COUNT(*) FROM dbo.scan_event WHERE event_id = N'$ACTIVE_EVENT_ID';")" "18"
+# Gold do usp_refresh_gold tính lại sau mỗi đợt Silver (spark/gold.py)
+expect "Gold khớp Silver: tổng theo cổng / theo phút / số cảnh báo" "$(sql "
+  SELECT CONCAT(
+    (SELECT ISNULL(SUM(total_scans), 0) FROM dbo.gold_gate_stats  WHERE event_id = N'$ACTIVE_EVENT_ID'), '/',
+    (SELECT ISNULL(SUM(total_scans), 0) FROM dbo.gold_event_stats WHERE event_id = N'$ACTIVE_EVENT_ID'), '/',
+    (SELECT COUNT(*) FROM dbo.gold_alert WHERE event_id = N'$ACTIVE_EVENT_ID'));")" "18/18/13"
 # Mục 4 của database/check.sql
 expect "check.sql mục 4: số dòng lệch giữa scan_event và fraud_alert" "$(sql "
   SELECT COUNT(*) FROM (

@@ -32,9 +32,11 @@ INCONSISTENT_TICKET_STATE = "INCONSISTENT_TICKET_STATE"
 VN_OFFSET_MS = 7 * 3600 * 1000  # Việt Nam luôn UTC+7, không đổi giờ theo mùa
 INT_MAX = 2_147_483_647          # cột *_ms là INT
 
-# 21 cột Spark ghi vào scan_event (file 13 mục C.1). 4 cột còn lại SQL Server tự tính.
+# 22 cột Spark ghi vào scan_event (file 13 mục C.1): 21 cột của file 08 cộng event_id (sự kiện
+# đang chạy, ACTIVE_EVENT_ID; cột NOT NULL do A thêm ở init.sql). 4 cột còn lại SQL Server tự tính.
 SCAN_EVENT_COLUMNS = [
-    "scan_event_id", "ticket_id", "scanner_id", "gate_id", "operator_id", "previous_scan_event_id",
+    "scan_event_id", "event_id", "ticket_id", "scanner_id", "gate_id", "operator_id",
+    "previous_scan_event_id",
     "raw_qr_payload", "decode_error", "scanned_at", "received_at",
     "processing_ts", "ticket_status_before", "ticket_status_after", "scan_result",
     "alert_level", "alert_code", "previous_scan_gate_id", "time_since_previous_scan_ms",
@@ -191,6 +193,8 @@ def compute_silver(events: DataFrame, tickets: DataFrame, valid_scans: DataFrame
                  & (col("gate_id") == col("tr_to")), "left")
     return df.select(
         "scan_event_id",
+        # Mọi lượt quét thuộc sự kiện đang chạy, kể cả INVALID (vé giả, vé của sự kiện khác)
+        F.lit(ctx.event_id).alias("event_id"),
         col("tid").alias("ticket_id"),
         "scanner_id", "gate_id", "operator_id", "previous_scan_event_id",
         "raw_qr_payload", "decode_error", "scanned_ms", "received_ms",
@@ -212,7 +216,7 @@ def compute_silver(events: DataFrame, tickets: DataFrame, valid_scans: DataFrame
 def build_writes(rows, now_ms):
     """rows: kết quả compute_silver() đã collect. Trả (scan_rows, ticket_updates, rejected).
 
-    scan_rows      : list dict đúng 21 cột của scan_event, giờ đã đổi sang chuỗi giờ Việt Nam
+    scan_rows      : list dict đúng 22 cột của scan_event, giờ đã đổi sang chuỗi giờ Việt Nam
     ticket_updates : list dict {ticket_id, status_before, status_after}, mỗi vé tối đa một dòng
     rejected       : list (scan_event_id, lý do) - không ghi Silver
     """
