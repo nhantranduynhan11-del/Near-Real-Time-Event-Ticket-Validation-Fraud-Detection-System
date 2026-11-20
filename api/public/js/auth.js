@@ -26,7 +26,7 @@
   // Tài khoản demo — khớp database/seed.sql mục 6.
   var MOCK_PASSWORD = 'Demo@123';
   var MOCK_USERS = {
-    op_gate_a:  { user_id: 'OP_A', username: 'op_gate_a',  last_name: 'Nguyễn', first_name: 'An',    role: 'GATE_OPERATOR' },
+    op_gate_a:  { user_id: 'OP_A', username: 'op_gate_a',  last_name: 'Hà', first_name: 'Văn Nhâm', role: 'GATE_OPERATOR' },
     op_gate_b:  { user_id: 'OP_B', username: 'op_gate_b',  last_name: 'Trần',   first_name: 'Bình',  role: 'GATE_OPERATOR' },
     op_gate_c:  { user_id: 'OP_C', username: 'op_gate_c',  last_name: 'Lê',     first_name: 'Chi',   role: 'GATE_OPERATOR' },
     op_gate_d:  { user_id: 'OP_D', username: 'op_gate_d',  last_name: 'Phạm',   first_name: 'Dũng',  role: 'GATE_OPERATOR' },
@@ -102,7 +102,7 @@
     if (!isOnLoginPage()) location.replace(LOGIN_PAGE);
   }
 
-  // Tên hiển thị: "Họ Tên" (ví dụ "Nguyễn An"), thiếu thì dùng username.
+  // Tên hiển thị: "Họ Tên" (ví dụ "Hà Văn Nhâm"), thiếu thì dùng username.
   function displayName(session) {
     var u = session && session.user;
     if (!u) return '';
