@@ -69,10 +69,10 @@ python spark/check_env.py   # mọi dòng phải là [ OK ]
 ## 4. Bật hệ thống
 
 ```bash
-chmod +x scripts/*.sh    #chỉ cần làm trong lần chạy đầu
+chmod +x scripts/*.sh    # chỉ cần làm trong lần chạy đầu
 ./scripts/up.sh app      # SQL Server + API
 ./scripts/up.sh stream   # SQL Server + Kafka + Spark
-./scripts/up.sh full     # tất cả
+./scripts/up.sh full     # tất cả (SQL Server + Kafka + Spark + API)
 ```
 Lần đầu Spark tải gói Kafka, đợi 1-3 phút.
 
@@ -81,6 +81,21 @@ Lần đầu Spark tải gói Kafka, đợi 1-3 phút.
 docker compose -f docker/docker-compose.yml --env-file docker/.env ps
 ```
 mọi container `running`/`healthy`, và mở được `http://localhost:3000`.
+
+## 4b. Mở giao diện Web và Dashboard
+
+Khi API đã chạy (`./scripts/up.sh app` hoặc `./scripts/up.sh full`), mở trình duyệt tại `http://localhost:3000`:
+
+| Vai trò | Tài khoản demo | Mật khẩu | Các trang sử dụng |
+|---|---|---|---|
+| **Event Supervisor** (Giám sát) | `supervisor` | `Demo@123` | **Dashboard** (`#dashboard`), **Quản trị vé** (`#tickets`), **In vé** (`#print`) |
+| **Gate Operator** (Nhân viên cổng) | `op_gate_a`, `op_gate_b`, `op_gate_c`, `op_gate_d` | `Demo@123` | **Quét vé** (`#scan`) |
+
+- **Cách mở Dashboard giám sát trực tiếp:**
+  1. Truy cập `http://localhost:3000`, đăng nhập bằng tài khoản `supervisor` / `Demo@123`.
+  2. Hệ thống tự mở tab **Dashboard** (`http://localhost:3000/app.html#dashboard`), hoặc bấm nút **Dashboard** trên thanh điều hướng.
+  3. Trang Dashboard tự động gọi `GET /api/dashboard/live` mỗi 1 giây để hiển thị tổng lượt quét, số lượng theo 6 loại kết quả, tỷ lệ gian lận (chỉ tính mức `FRAUD`), biểu đồ lưu lượng theo cổng, danh sách cảnh báo mới nhất và trạng thái kết nối API.
+- **Trang quét vé (`#scan`):** đăng nhập bằng `op_gate_a` (hoặc `op_gate_b`, `op_gate_c`, `op_gate_d`), chọn cổng và máy quét, bật camera quét mã QR hoặc nhập chuỗi QR vào ô nhập tay. Với lượt `USED`, màn hình phân biệt rõ bằng chữ và màu giữa **Hai người dùng chung vé** (`IMPOSSIBLE_TRAVEL`) và **Vé đã vào rồi** (`DUPLICATE_SCAN`), kèm cổng quét lần trước và số giây cách lần quét trước; với lượt `WRONG_GATE`, màn hình hiện cổng đúng của vé.
 
 ## 5. Thử một lượt quét
 
@@ -120,7 +135,7 @@ python3 scripts/send_scans.py --qr TK001                      # in chuỗi QR đ
 
 Chuỗi QR được ký bằng `QR_HMAC_SECRET` trong `docker/.env`, nên biến này phải có, tối thiểu 32 ký tự (`openssl rand -hex 32`).
 
-Kiểm thử của Role B:
+Kiểm thử Silver của Role B:
 
 ```bash
 .venv/bin/python spark/tests/test_silver_logic.py   # luật Silver, không cần Docker
@@ -129,15 +144,80 @@ Kiểm thử của Role B:
 ./scripts/measure_ingestion_lag.sh                  # đo độ trễ 100 lượt -> docs/ingestion_lag.md
 ```
 
-## 6. Đưa dữ liệu về ban đầu
+## 6. Chạy bộ kiểm thử 8 ca gian lận (TC01–TC08)
+
+Yêu cầu hệ thống đang chạy ở chế độ `full` (`./scripts/up.sh full`) và đã cài `curl`, `jq`:
+
+```bash
+./scripts/run_test_cases.sh              # chạy đầy đủ cả 8 ca TC01..TC08
+./scripts/run_test_cases.sh TC05 TC07    # chỉ chạy riêng một số ca
+RESET_MODE=full ./scripts/run_test_cases.sh  # reset toàn phần (chạy reset.sh -y và bật lại Spark mỗi ca)
+```
+
+Script tự động đăng nhập các tài khoản cổng, tạm thời mở khung giờ nhận khách của `EV001` nếu chạy ngoài giờ sự kiện, reset dữ liệu trước mỗi ca và in bảng tổng hợp `Expected / Actual / Kết quả` cho cả 8 ca. Báo cáo kiểm thử chi tiết nằm tại `docs/test_report.md`.
+
+## 7. Đo tải, Đo chỉ mục (Index) và Theo dõi hệ thống (Monitoring)
+
+### 7.1 Đo tải và độ trễ xử lý (Role B)
+
+Đảm bảo pipeline đang chạy (`./scripts/up.sh full` hoặc `./scripts/up.sh stream`) và khung giờ nhận khách bao phủ thời điểm hiện tại:
+
+```bash
+./scripts/dev_event_window.sh now
+
+# Đo mặc định 100 lượt (mỗi 200 ms một lượt ~ 5 lượt/giây)
+./scripts/measure_ingestion_lag.sh
+
+# Đo ở mức tải cao hơn (ví dụ 25 lượt/giây trong 2 phút = 3000 lượt, mỗi 40 ms)
+N=3000 INTERVAL_MS=40 ./scripts/measure_ingestion_lag.sh
+```
+
+Trong lúc script đo tải đang chạy, có thể mở `http://localhost:3000/app.html#dashboard` để quan sát tổng lượt quét, tỷ lệ gian lận và biểu đồ theo cổng tăng liên tục theo thời gian thực. Số liệu tổng hợp và biểu đồ độ trễ được ghi tại `docs/ingestion_lag.md` và `docs/performance.md`.
+
+### 7.2 Theo dõi hệ thống (Monitoring — Role B)
+
+In nhanh các truy vấn chạy chậm nhất, kích thước và số dòng từng bảng, độ trễ pipeline của các lượt quét gần nhất và số bản tin lỗi trong `scan-events-dlq`:
+
+```bash
+./scripts/monitor.sh
+```
+Ví dụ kết quả được lưu tại `docs/monitoring.md`.
+
+### 7.3 Sinh dữ liệu lớn 300.000 dòng để đo Index (Role A)
+
+Nạp bộ dữ liệu khoảng 300.000 dòng `scan_event` và vài nghìn vé trực tiếp bằng SQL để đo hiệu năng trước và sau khi đánh chỉ mục:
+
+```bash
+COMPOSE_PROFILES=full docker compose -f docker/docker-compose.yml --env-file docker/.env \
+  exec -T sqlserver /opt/mssql-tools18/bin/sqlcmd \
+  -S localhost -U sa -P "$DB_PASSWORD" -C -I -b -d ticket_system \
+  < database/generate_load_data.sql
+```
+Kiểm tra toàn vẹn dữ liệu bằng `database/check.sql` (phải trả 0 dòng lỗi). Báo cáo so sánh kế hoạch thực thi và `STATISTICS TIME, IO` trước/sau khi tạo index nằm tại `docs/indexing.md`.
+
+## 8. Sao lưu và Khôi phục cơ sở dữ liệu (Backup & Restore — Role A)
+
+Thư mục `./backup` ở gốc repo được gắn vào `/var/opt/mssql/backup` của container `sqlserver` trong `docker/docker-compose.yml`.
+
+```bash
+# 1. Sao lưu toàn bộ database ticket_system vào thư mục backup/
+./scripts/backup_db.sh
+
+# 2. Khôi phục database ticket_system từ bản sao lưu
+./scripts/restore_db.sh
+```
+
+Kịch bản kiểm chứng đầy đủ (đếm số dòng các bảng → sao lưu → xóa dữ liệu giả lập sự cố → khôi phục → đếm lại khớp số dòng ban đầu) kèm thời gian sao lưu/khôi phục trên bộ dữ liệu 300.000 dòng được ghi tại `docs/backup_restore.md`.
+
+## 9. Đưa dữ liệu về ban đầu
 
 ```bash
 ./scripts/reset.sh      # có hỏi xác nhận; xóa cả bản tin trong Kafka nếu Kafka đang chạy
 ./scripts/reset.sh -y   # bỏ qua hỏi
-find data/bronze -name '*.parquet' #để kiểm tra lại, nếu không tìm thấy file thì đạt.
+find data/bronze -name '*.parquet' # để kiểm tra lại, nếu không tìm thấy file thì đạt.
 ```
 
-## 7. Tắt
+## 10. Tắt hệ thống
 
 ```bash
 docker compose -f docker/docker-compose.yml --env-file docker/.env --profile full down
@@ -145,7 +225,7 @@ kill "$(cat .spark.pid)" 2>/dev/null   # nếu Spark đang chạy
 ```
 Thêm `-v` vào lệnh `down` để xóa luôn dữ liệu SQL Server.
 
-## 8. Lỗi hay gặp
+## 11. Lỗi hay gặp
 
 | Lỗi | Cách xử lý |
 |---|---|
@@ -155,4 +235,4 @@ Thêm `-v` vào lệnh `down` để xóa luôn dữ liệu SQL Server.
 | `UnknownTopicOrPartitionException` | Topic chưa có — chạy `bash scripts/create_topics.sh` |
 | `DELETE failed ... QUOTED_IDENTIFIER` khi chạy `reset.sh` | Đã sửa trong `reset.sh` (cờ `-I`); tải lại bản mới nhất |
 | Giờ lệch 7 tiếng | Thiếu `TZ=Asia/Ho_Chi_Minh` ở một thành phần nào đó |
-|The command 'docker' could not be found in this WSL 2 distro.| Chưa bật `Docker Desktop`. Nếu đã bật vẫn không được thì thoát và bật lại|
+| `The command 'docker' could not be found in this WSL 2 distro.` | Chưa bật `Docker Desktop`. Nếu đã bật vẫn không được thì thoát và bật lại |
