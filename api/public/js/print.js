@@ -11,6 +11,22 @@
 
   var T = window.TicketUI;
 
+  var MOCK_TICKETS = [
+    { ticket_id: 'TK001', event_id: 'EV001', ticket_status: 'UNUSED' },
+    { ticket_id: 'TK002', event_id: 'EV001', ticket_status: 'UNUSED' },
+    { ticket_id: 'TK003', event_id: 'EV001', ticket_status: 'CANCELLED' },
+    { ticket_id: 'TK004', event_id: 'EV001', ticket_status: 'UNUSED' },
+    { ticket_id: 'TK005', event_id: 'EV002', ticket_status: 'UNUSED' },
+    { ticket_id: 'TK006', event_id: 'EV001', ticket_status: 'UNUSED' },
+    { ticket_id: 'TK007', event_id: 'EV001', ticket_status: 'UNUSED' }
+  ];
+
+  function isMockSession() {
+    var s = window.TicketAuth && TicketAuth.getSession && TicketAuth.getSession();
+    return !!(s && typeof s.access_token === 'string' &&
+      s.access_token.indexOf('.bW9jay1zaWduYXR1cmU') !== -1);
+  }
+
   T.register('print', {
     title: 'In vé',
     roles: ['EVENT_SUPERVISOR'],
@@ -95,6 +111,22 @@
           suggEl.appendChild(more);
         }
       } catch (e) {
+        if (isMockSession()) {
+          suggEl.textContent = '';
+          MOCK_TICKETS.forEach(function (t) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'chip';
+            b.textContent = t.ticket_id;
+            b.title = t.event_id + ' · ' + T.statusLabel(t.ticket_status);
+            b.addEventListener('click', function () {
+              idInput.value = t.ticket_id;
+              loadQr(t.ticket_id);
+            });
+            suggEl.appendChild(b);
+          });
+          return;
+        }
         suggEl.textContent = 'Không tải được danh sách vé: ' + e.message;
       }
     }
@@ -146,6 +178,14 @@
         outEl.hidden = false;
         whenEl.textContent = 'Tạo lúc ' + new Date().toLocaleTimeString('vi-VN');
       } catch (e) {
+        if (isMockSession()) {
+          var mockPayload = ticketId + '.m9f3a8b7c6d5e4f3a2b1c0';
+          renderQr(mockPayload);
+          idLabel.textContent = ticketId;
+          outEl.hidden = false;
+          whenEl.textContent = 'Tạo lúc ' + new Date().toLocaleTimeString('vi-VN') + ' (mã QR giả lập)';
+          return;
+        }
         showError('Không tải được mã QR: ' + (e && e.message ? e.message : e));
       } finally {
         loadBtn.disabled = false;
