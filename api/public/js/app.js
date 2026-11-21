@@ -31,11 +31,11 @@
     WRONG_GATE: { label: 'Từ chối',  detail: 'Sai cổng',         cls: 'warn' }
   };
 
-  // Mã cảnh báo (file 07 / UC02).
+  // Mã cảnh báo (file 07 / UC02 / D1).
   TicketUI.ALERT_CODES = {
     INVALID_QR:         'Mã QR sai chữ ký hoặc không hợp lệ',
-    DUPLICATE_SCAN:     'Vé đã dùng, bị quét lại',
-    IMPOSSIBLE_TRAVEL:  'Di chuyển bất thường giữa hai cổng',
+    DUPLICATE_SCAN:     'Vé đã vào rồi',
+    IMPOSSIBLE_TRAVEL:  'Hai người dùng chung vé',
     REVOKED_TICKET:     'Vé đã bị thu hồi',
     WRONG_GATE_WARNING: 'Vào nhầm cổng',
     WRONG_GATE_FRAUD:   'Cố tình dò nhiều cổng'
@@ -82,6 +82,20 @@
     return d.toLocaleString('vi-VN');
   };
 
+  // Đổi mili giây sang số giây dễ đọc cho nhân viên tại cổng (D1).
+  TicketUI.formatSeconds = function (ms) {
+    if (ms == null || isNaN(Number(ms))) return null;
+    var sec = Math.max(0, Math.round(Number(ms) / 1000));
+    return sec + ' giây';
+  };
+
+  // Đổi tỷ lệ 0..1 sang phần trăm (file 15 mục 0: 0.0174 → 1,74%).
+  TicketUI.formatRate = function (rate) {
+    var n = Number(rate);
+    if (rate == null || isNaN(n)) return '0,00%';
+    return (n * 100).toFixed(2).replace('.', ',') + '%';
+  };
+
   // Đọc lỗi chuẩn { error: { code, message, details } } (file 15).
   TicketUI.readError = async function (res) {
     var data = null;
@@ -111,6 +125,7 @@
     NAV = [{ hash: 'scan', label: 'Quét vé' }];
   } else if (role === 'EVENT_SUPERVISOR') {
     NAV = [
+      { hash: 'dashboard', label: 'Dashboard' },
       { hash: 'tickets', label: 'Quản trị vé' },
       { hash: 'print', label: 'In vé' }
     ];
@@ -118,6 +133,7 @@
 
   var navEl = document.getElementById('nav');
   var viewEl = document.getElementById('view');
+  var activeView = null;
 
   function defaultHash() { return NAV.length ? NAV[0].hash : ''; }
 
@@ -141,6 +157,11 @@
       view = views[hash];
     }
     if (!view) return;
+
+    if (activeView && typeof activeView.unmount === 'function') {
+      try { activeView.unmount(); } catch (e) { /* bỏ qua */ }
+    }
+    activeView = view;
 
     renderNav(hash);
     viewEl.textContent = '';
