@@ -63,11 +63,11 @@ h2 { font-size: 16px; margin: 0 0 4px; }
 /* ----- Màn hình sau đăng nhập ----- */
 .topbar { background: var(--card); border-bottom: 1px solid var(--line); }
 .topbar-inner {
-  max-width: 760px; margin: 0 auto; padding: 12px 16px;
+  max-width: 1020px; margin: 0 auto; padding: 12px 16px;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
 .brand { font-weight: 700; }
-.app-main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+.app-main { max-width: 1020px; margin: 0 auto; padding: 24px 16px; }
 
 .nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
 .nav-item { flex: 1 1 auto; min-width: 120px; }
@@ -153,18 +153,57 @@ h2 { font-size: 16px; margin: 0 0 4px; }
 .manual { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
 .manual .field { flex: 1 1 260px; margin-bottom: 0; }
 
-/* ----- Kết quả quét ----- */
+/* ----- Kết quả quét (Phase 6 + Phase 7 · D1) ----- */
 .result-banner { border-radius: 10px; padding: 18px; color: #fff; margin-bottom: 12px; }
 .result-banner.ok { background: var(--ok); }
 .result-banner.deny { background: var(--down); }
 .result-banner.warn { background: #d97706; }
+.result-banner.wrong-gate-fraud { background: #b91c1c; }
+.result-banner.duplicate-scan { background: #c2410c; }
+.result-banner.impossible-travel { background: #881337; }
 .result-banner.processing { background: #2563eb; }
 .result-entry { font-size: 26px; font-weight: 800; letter-spacing: .02em; }
 .result-result { font-size: 15px; margin-top: 4px; }
-.result-code { opacity: .85; font-family: ui-monospace, monospace; font-size: 13px; }
-.result-alert { margin: 6px 0; padding: 8px 10px; background: #fdf3e3; color: #92400e; border-radius: 6px; font-size: 13px; }
-.result-wrong-gate { margin: 6px 0; padding: 8px 10px; background: #fef3c7; color: #92400e; border-radius: 6px; font-size: 14px; }
-.result-meta { color: var(--muted); font-size: 13px; }
+.result-code { opacity: .88; font-family: ui-monospace, monospace; font-size: 13px; }
+.result-alert { margin: 8px 0; padding: 10px 12px; background: #fdf3e3; color: #92400e; border: 1px solid #f59e0b; border-radius: 8px; font-size: 13px; }
+.result-alert.fraud { background: #fef2f2; color: #991b1b; border-color: #f87171; }
+.result-alert.warning { background: #fffbeb; color: #92400e; border-color: #fbbf24; }
+.result-alert code { font-family: ui-monospace, monospace; font-weight: 600; }
+
+/* D1: Chi tiết lượt quét USED — phân biệt rõ IMPOSSIBLE_TRAVEL và DUPLICATE_SCAN */
+.result-used { margin: 10px 0; padding: 14px; border-radius: 10px; border: 2px solid transparent; }
+.result-used.impossible { background: #fff1f2; border-color: #be123c; color: #881337; }
+.result-used.duplicate  { background: #fff7ed; border-color: #ea580c; color: #9a3412; }
+.result-used-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.result-used-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 800; letter-spacing: .03em; color: #fff;
+}
+.result-used.impossible .result-used-badge { background: #be123c; }
+.result-used.duplicate  .result-used-badge { background: #ea580c; }
+.result-used-code { font-family: ui-monospace, monospace; font-size: 12px; font-weight: 700; }
+.result-used-title { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+.result-used-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px; padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,.75);
+  margin-bottom: 8px;
+}
+.result-used-item .sub { display: block; margin: 0 0 2px; font-size: 12px; color: inherit; opacity: .8; }
+.result-used-item strong { font-size: 16px; }
+.result-used-note { font-size: 13px; opacity: .92; }
+
+/* D1: Chi tiết lượt quét WRONG_GATE */
+.result-wrong-gate {
+  margin: 8px 0; padding: 12px 14px; background: #fef3c7; color: #92400e;
+  border: 1px solid #f59e0b; border-radius: 8px; font-size: 14px;
+}
+.result-wrong-gate.fraud {
+  background: #fef2f2; color: #991b1b; border-color: #ef4444;
+}
+.result-wrong-gate-title { font-weight: 700; margin-bottom: 4px; }
+.result-wrong-gate-hint { font-size: 13px; margin-top: 4px; opacity: .9; }
+
+.result-meta { color: var(--muted); font-size: 13px; margin-top: 8px; }
 .result-meta code { background: var(--card); border: 1px solid var(--line); padding: 1px 5px; border-radius: 4px; }
 
 /* ----- Gợi ý chọn vé (chip) ----- */
@@ -197,3 +236,93 @@ h2 { font-size: 16px; margin: 0 0 4px; }
   .print-card { border: none; }
   .print-card canvas { max-width: 340px; }
 }
+
+/* =====================================================================
+   Phase 7 · Role D (D2) — Trang Dashboard giám sát trực tiếp
+   ===================================================================== */
+.db-conn-banner {
+  margin-bottom: 14px; padding: 12px 16px; border-radius: 10px;
+  background: #fef2f2; border: 1px solid #ef4444; color: #991b1b;
+  font-size: 14px;
+}
+.db-conn-banner code {
+  background: rgba(255,255,255,.7); padding: 1px 5px; border-radius: 4px;
+  font-family: ui-monospace, monospace;
+}
+
+.db-header-card { margin-bottom: 16px; }
+.db-header-row {
+  display: flex; flex-wrap: wrap; align-items: flex-start;
+  justify-content: space-between; gap: 12px;
+}
+.db-status-box { text-align: right; }
+@media (max-width: 640px) { .db-status-box { text-align: left; } }
+
+.db-conn-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  border: 1px solid var(--line); background: var(--bg);
+}
+.db-conn-pill.ok { color: var(--ok); border-color: rgba(26,157,85,.35); }
+.db-conn-pill.down { color: var(--down); border-color: rgba(217,59,59,.45); background: #fef2f2; }
+
+.db-kpi-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  margin-bottom: 16px;
+}
+@media (max-width: 820px) { .db-kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 460px) { .db-kpi-grid { grid-template-columns: 1fr; } }
+
+.db-kpi .sub { display: block; margin: 0; }
+.db-kpi-value { font-size: 28px; font-weight: 800; line-height: 1.2; margin: 6px 0 4px; }
+.db-kpi-fraud { border-color: rgba(217,59,59,.35); }
+
+.db-result-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;
+  margin-top: 10px;
+}
+@media (max-width: 900px) { .db-result-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 520px) { .db-result-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.db-result-item {
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); border-left-width: 4px;
+}
+.db-result-item.res-valid      { border-left-color: var(--ok); }
+.db-result-item.res-wrong-gate { border-left-color: #d97706; }
+.db-result-item.res-used       { border-left-color: #be123c; }
+.db-result-item.res-invalid    { border-left-color: var(--down); }
+.db-result-item.res-cancelled  { border-left-color: #6d28d9; }
+.db-result-item.res-expired    { border-left-color: var(--muted); }
+
+.db-result-code {
+  display: block; font-family: ui-monospace, monospace;
+  font-size: 12px; font-weight: 700;
+}
+.db-result-label { display: block; font-size: 12px; color: var(--muted); }
+.db-result-num { font-size: 22px; font-weight: 800; margin-top: 4px; }
+
+.db-two-col {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  margin: 16px 0; align-items: stretch;
+}
+.db-two-col > .card { min-width: 0; }
+@media (max-width: 820px) { .db-two-col { grid-template-columns: 1fr; } }
+
+.db-chart-wrap {
+  position: relative; width: 100%; height: 270px;
+}
+
+.db-section-head {
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: space-between; gap: 10px;
+}
+
+.db-badge-warn { color: var(--warn); border-color: var(--warn); }
+.db-detail-tag {
+  display: inline-block; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; color: #fff;
+}
+.db-detail-tag.impossible { background: #be123c; }
+.db-detail-tag.duplicate  { background: #ea580c; }
+
