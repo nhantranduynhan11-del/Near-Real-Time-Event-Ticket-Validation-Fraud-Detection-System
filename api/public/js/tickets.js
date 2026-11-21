@@ -12,6 +12,22 @@
 
   var T = window.TicketUI;
 
+  var MOCK_TICKETS = [
+    { ticket_id: 'TK001', event_id: 'EV001', assigned_gate_id: 'GATE_A', ticket_status: 'FLAGGED_FRAUD' },
+    { ticket_id: 'TK002', event_id: 'EV001', assigned_gate_id: 'GATE_B', ticket_status: 'VALID_ENTRY' },
+    { ticket_id: 'TK003', event_id: 'EV001', assigned_gate_id: 'GATE_C', ticket_status: 'CANCELLED' },
+    { ticket_id: 'TK004', event_id: 'EV001', assigned_gate_id: 'GATE_B', ticket_status: 'UNUSED' },
+    { ticket_id: 'TK005', event_id: 'EV002', assigned_gate_id: 'GATE_E2', ticket_status: 'UNUSED' },
+    { ticket_id: 'TK006', event_id: 'EV001', assigned_gate_id: 'GATE_A', ticket_status: 'UNUSED' },
+    { ticket_id: 'TK007', event_id: 'EV001', assigned_gate_id: 'GATE_C', ticket_status: 'UNUSED' }
+  ];
+
+  function isMockSession() {
+    var s = window.TicketAuth && TicketAuth.getSession && TicketAuth.getSession();
+    return !!(s && typeof s.access_token === 'string' &&
+      s.access_token.indexOf('.bW9jay1zaWduYXR1cmU') !== -1);
+  }
+
   T.register('tickets', {
     title: 'Quản trị vé',
     roles: ['EVENT_SUPERVISOR'],
@@ -189,6 +205,18 @@
         renderRows(data.items || []);
         renderPager();
       } catch (e) {
+        if (isMockSession()) {
+          var filtered = MOCK_TICKETS.filter(function (t) {
+            if (state.q && t.ticket_id.indexOf(state.q.toUpperCase()) !== 0) return false;
+            if (state.status && t.ticket_status !== state.status) return false;
+            return true;
+          });
+          state.total = filtered.length;
+          state.pages = 1;
+          renderRows(filtered);
+          renderPager();
+          return;
+        }
         showListError('Không tải được danh sách vé: ' + (e && e.message ? e.message : e));
         rowsEl.innerHTML = '';
       }
@@ -380,6 +408,20 @@
         var d = await res.json();
         renderDetail(d);
       } catch (e) {
+        if (isMockSession()) {
+          renderDetail({
+            ticket_id: t.ticket_id,
+            event_id: t.event_id,
+            assigned_gate_id: t.assigned_gate_id,
+            ticket_status: t.ticket_status,
+            scan_count: t.ticket_id === 'TK001' ? 2 : 0,
+            scans: t.ticket_id === 'TK001' ? [
+              { received_at: '2026-12-12T19:00:01.000+07:00', gate_id: 'GATE_A', scan_result: 'VALID', alert_level: 'NONE', alert_code: null },
+              { received_at: '2026-12-12T19:00:04.000+07:00', gate_id: 'GATE_D', scan_result: 'USED', alert_level: 'FRAUD', alert_code: 'IMPOSSIBLE_TRAVEL', previous_scan_gate_id: 'GATE_A', time_since_previous_scan_ms: 3000 }
+            ] : []
+          });
+          return;
+        }
         detailEl.innerHTML = '<p class="form-error">Không tải được chi tiết vé: ' +
           T.escapeHtml(e && e.message ? e.message : e) + '</p>';
       }
@@ -389,8 +431,13 @@
       var scans = d.scans || [];
       var scanRows = scans.map(function (s) {
         var alert = (s.alert_level && s.alert_level !== 'NONE')
-          ? '<div class="mini">' + T.escapeHtml(s.alert_level) +
-            (s.alert_code ? ' · ' + T.escapeHtml(s.alert_code) : '') + '</div>'
+          ? '<div class="mini"><b>' + T.escapeHtml(s.alert_level) + '</b>' +
+            (s.alert_code ? ' · <code>' + T.escapeHtml(s.alert_code) + '</code> — ' +
+              T.escapeHtml(T.ALERT_CODES[s.alert_code] || '') : '') + '</div>'
+          : '';
+        var usedInfo = (s.scan_result === 'USED' && (s.previous_scan_gate_id || s.time_since_previous_scan_ms != null))
+          ? '<div class="mini deny-text">Cổng trước: ' + T.escapeHtml(s.previous_scan_gate_id || '—') +
+            (s.time_since_previous_scan_ms != null ? ' · Cách: ' + T.escapeHtml(T.formatSeconds(s.time_since_previous_scan_ms)) : '') + '</div>'
           : '';
         var wrong = (s.scan_result === 'WRONG_GATE' && s.ticket_assigned_gate_id)
           ? '<div class="mini warn-text">Cổng đúng: ' + T.escapeHtml(s.ticket_assigned_gate_id) + '</div>'
@@ -399,7 +446,7 @@
           '<td>' + T.escapeHtml(T.formatTime(s.received_at)) + '</td>' +
           '<td>' + T.escapeHtml(s.gate_id) + '</td>' +
           '<td><span class="mini ' + resultCls(s.scan_result) + '">' + T.escapeHtml(s.scan_result) + '</span></td>' +
-          '<td>' + alert + wrong + '</td>' +
+          '<td>' + alert + usedInfo + wrong + '</td>' +
         '</tr>';
       }).join('');
 
