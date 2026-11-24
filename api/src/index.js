@@ -26,6 +26,7 @@ app.use('/api/gates', require('./routes/gates'));
 app.use('/api/scanners', require('./routes/scanners'));
 app.use('/api/events', require('./routes/events'));
 app.use('/api/scan', require('./routes/scan'));
+app.use('/api/dashboard', require('./routes/dashboard'));
 
 // 404 cho route /api/*
 app.use('/api', (req, res) => {
