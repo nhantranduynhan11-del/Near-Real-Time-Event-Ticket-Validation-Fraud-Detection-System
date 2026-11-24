@@ -25,8 +25,8 @@ const config = {
     server: process.env.DB_HOST_INTERNAL || 'sqlserver',
     port: parseInt(process.env.DB_PORT || '1433', 10),
     database: process.env.DB_NAME || 'ticket_system',
-    user: process.env.DB_USER || 'sa',
-    password: process.env.DB_PASSWORD || '',
+    user: process.env.DB_USER_API || process.env.DB_USER || 'sa',
+    password: process.env.DB_PASSWORD_API || process.env.DB_PASSWORD || '',
     options: {
       encrypt: (process.env.DB_ENCRYPT || 'false') === 'true',
       trustServerCertificate: true,
