@@ -119,11 +119,13 @@ def compute_silver(events: DataFrame, tickets: DataFrame, valid_scans: DataFrame
     df = (events.join(F.broadcast(state), (~col("decode_error")) & (col("ticket_id") == col("t_id")), "left")
           .select("*", F.when(found, col("t_id")).alias("tid")))
 
-    # (2) Thứ tự trong batch, còn giờ nhận khách không, đúng cổng không
+    # (2) Thứ tự trong batch, còn giờ nhận khách không, đúng cổng không.
+    #     Giờ nhận khách tính CẢ HAI ĐẦU: admission_start <= received_at <= admission_end, tức quét
+    #     đúng 20:00:00.000 vẫn còn trong giờ, từ 20:00:00.001 mới là hết giờ (nhóm chốt 25/11).
     df = df.select(
         "*",
         F.row_number().over(in_order).alias("rn"),
-        ((col("received_ms") >= F.lit(ctx.start_ms)) & (col("received_ms") < F.lit(ctx.end_ms))).alias("in_window"),
+        ((col("received_ms") >= F.lit(ctx.start_ms)) & (col("received_ms") <= F.lit(ctx.end_ms))).alias("in_window"),
         (col("t_gate").isNull() | (col("gate_id") == col("t_gate"))).alias("gate_ok"))
 
     # (3) Lượt đầu tiên trong batch đủ điều kiện vào (vé UNUSED, còn giờ, đúng cổng) là lượt VALID.

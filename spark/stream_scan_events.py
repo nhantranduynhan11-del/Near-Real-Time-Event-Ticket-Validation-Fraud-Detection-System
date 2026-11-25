@@ -60,16 +60,74 @@ def parse_args(argv=None):
 
 
 def db_settings():
-    """Kết nối SQL Server từ WSL (ngoài Docker): DB_HOST_EXTERNAL. SPARK_DB_* để dành cho tài khoản
-    riêng của Spark ở Phase 8 (bảo mật); chưa đặt thì dùng DB_USER/DB_PASSWORD."""
+    """Kết nối SQL Server từ WSL (ngoài Docker): DB_HOST_EXTERNAL.
+
+    Tài khoản: SPARK_DB_USER/SPARK_DB_PASSWORD (tài khoản riêng của Spark, B4, tạo bằng
+    database/security.sql). Để trống CẢ HAI thì dùng DB_USER/DB_PASSWORD (sa). Chỉ điền một trong
+    hai là lỗi cấu hình: không ghép tên tài khoản Spark với mật khẩu sa.
+    """
+    spark_user = get_config("SPARK_DB_USER", "")
+    spark_password = get_config("SPARK_DB_PASSWORD", "")
+    if bool(spark_user) != bool(spark_password):
+        raise SystemExit("LỖI: SPARK_DB_USER và SPARK_DB_PASSWORD phải điền cả hai, hoặc để trống cả hai "
+                         "(khi đó Spark dùng DB_USER/DB_PASSWORD).")
     return dict(
         host=get_config("DB_HOST_EXTERNAL", "localhost"),
         port=int(get_config("DB_PORT", "1433")),
         database=get_config("DB_NAME", "ticket_system"),
-        user=get_config("SPARK_DB_USER", "") or get_config("DB_USER", "sa"),
-        password=get_config("SPARK_DB_PASSWORD", "") or get_config("DB_PASSWORD", ""),
+        user=spark_user or get_config("DB_USER", "sa"),
+        password=spark_password or get_config("DB_PASSWORD", ""),
         encrypt=get_config("DB_ENCRYPT", "false").lower() == "true",
     )
+
+
+# Quyền tối thiểu Spark cần (khớp ma trận đọc/ghi ở file 15 mục 6 và các câu SQL trong
+# spark/silver_scan_events.py). Thiếu quyền bắt buộc thì Silver hỏng giữa chừng, nên kiểm từ đầu.
+REQUIRED_PERMISSIONS = [
+    ("dbo.ticket", "SELECT", "tra vé, khóa vé trong giao dịch"),
+    ("dbo.ticket", "UPDATE", "đổi ticket_status"),
+    ("dbo.scan_event", "SELECT", "bỏ lượt đã ghi, đọc lượt VALID và cổng sai đã có"),
+    ("dbo.scan_event", "INSERT", "ghi Silver"),
+    ("dbo.fraud_alert", "INSERT", "ghi cảnh báo"),
+    ("dbo.[event]", "SELECT", "khung giờ nhận khách"),
+    ("dbo.event_gate", "SELECT", "số cổng N"),
+    ("dbo.gate_travel_time", "SELECT", "thời gian đi bộ (R4)"),
+    ("dbo.scanner", "SELECT", "kiểm cặp máy quét - cổng"),
+    ("dbo.app_user", "SELECT", "kiểm operator_id là GATE_OPERATOR"),
+]
+OPTIONAL_PERMISSIONS = [
+    ("dbo.usp_refresh_gold", "EXECUTE", "tính lại Gold sau mỗi đợt (thiếu thì Gold đứng yên)"),
+]
+
+
+def check_permissions(db, user):
+    """In quyền còn thiếu kèm câu GRANT. Thiếu quyền bắt buộc thì dừng, thiếu quyền Gold thì cảnh báo."""
+    rows = ", ".join(f"(N'{obj}', N'{perm}')" for obj, perm, _ in REQUIRED_PERMISSIONS + OPTIONAL_PERMISSIONS)
+    sql = ("SELECT (SELECT v.obj, v.perm, HAS_PERMS_BY_NAME(v.obj, N'OBJECT', v.perm) AS ok "
+           f"FROM (VALUES {rows}) AS v (obj, perm) FOR JSON PATH, INCLUDE_NULL_VALUES) AS perms")
+    with db.transaction():
+        (perms,) = db.query_json(sql)
+    granted = {(p["obj"], p["perm"]) for p in perms if p.get("ok") == 1}
+
+    def missing(items):
+        return [(o, p, why) for o, p, why in items if (o, p) not in granted]
+
+    def show(items):
+        for obj, perm, why in items:
+            print(f"    GRANT {perm} ON {obj} TO [{user}];   -- {why}", flush=True)
+
+    lack_optional = missing(OPTIONAL_PERMISSIONS)
+    if lack_optional:
+        print(f"[pipeline] CẢNH BÁO: tài khoản {user} thiếu quyền cho Gold. Chạy bằng sa:", flush=True)
+        show(lack_optional)
+    lack_required = missing(REQUIRED_PERMISSIONS)
+    if lack_required:
+        print(f"[pipeline] LỖI: tài khoản {user} thiếu quyền Silver cần. Chạy bằng sa rồi bật lại Spark:",
+              flush=True)
+        show(lack_required)
+        raise SystemExit(1)
+    print(f"[pipeline] Tài khoản {user}: đủ quyền cho Silver"
+          f"{'' if not lack_optional else ' (thiếu quyền Gold)'}.", flush=True)
 
 
 def build_spark() -> SparkSession:
@@ -180,7 +238,7 @@ def main(argv=None):
     print(f"  Query      : {args.only}   {'chạy một lần' if args.once else 'liên tục'}")
     print(f"  Bronze     : {args.bronze_path}  (checkpoint {args.bronze_checkpoint})")
     print(f"  Silver     : SQL Server {settings['host']}:{settings['port']}/{settings['database']}"
-          f"  ACTIVE_EVENT_ID={event_id}  (checkpoint {args.silver_checkpoint})")
+          f" (tài khoản {settings['user']})  ACTIVE_EVENT_ID={event_id}  (checkpoint {args.silver_checkpoint})")
     print(f"  Múi giờ    : {SESSION_TZ}", flush=True)
     if not settings["password"]:
         raise SystemExit("LỖI: chưa có DB_PASSWORD (docker/.env). Chạy qua scripts/up.sh hoặc đặt ENV_FILE.")
@@ -195,6 +253,7 @@ def main(argv=None):
             starters["bronze"] = lambda: start_bronze(spark, args)
         if args.only in ("all", "silver"):
             wait_for_db(db, event_id)
+            check_permissions(db, settings["user"])
             job = SilverJob(spark, db, event_id, args.bootstrap, args.dlq_topic,
                             gold_hook=gold.refresh_gold)
             job.warm_up()                    # để lượt quét đầu tiên không phải chờ JVM "nóng máy"

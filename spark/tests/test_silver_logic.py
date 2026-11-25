@@ -30,8 +30,9 @@ EVENT_SCHEMA = ("scan_event_id string, raw_qr_payload string, ticket_id string, 
 def ms(hhmmss, day=12):
     """'19:00:01' ngày demo 12/12/2026 (giờ VN) -> epoch ms. Có thể kèm '.mmm'."""
     t = datetime.strptime(hhmmss, "%H:%M:%S.%f" if "." in hhmmss else "%H:%M:%S")
-    dt = datetime(2026, 12, day, t.hour, t.minute, t.second, t.microsecond, tzinfo=VN)
-    return int(dt.timestamp() * 1000)
+    dt = datetime(2026, 12, day, t.hour, t.minute, t.second, tzinfo=VN)
+    # Cộng phần mili giây bằng số nguyên: nhân float * 1000 có thể lệch 1 ms ở ca ranh giới .001
+    return int(dt.timestamp()) * 1000 + t.microsecond // 1000
 
 
 CTX = EventContext("EV001", ms("18:00:00"), ms("20:00:00"), gate_count=4)
@@ -46,6 +47,7 @@ SEED_TICKETS = {  # file 10, trạng thái ban đầu
     "TK008": ("EV001", None, "UNUSED"),     # vé không giới hạn cổng (thêm để thử)
     "TK009": ("EV001", "GATE_A", "EXPIRED"),  # vé đã được tiến trình đóng cổng chuyển EXPIRED
     "TK010": ("EV001", "GATE_A", "UNUSED"),
+    "TK011": ("EV001", "GATE_B", "UNUSED"),
 }
 TRAVEL = []
 for (a, b), sec in {("GATE_A", "GATE_B"): 45, ("GATE_A", "GATE_C"): 90, ("GATE_A", "GATE_D"): 140,
@@ -197,8 +199,9 @@ def run_all(spark):
     e = sc.scan("TK009", "GATE_A", ms("19:00:00"))   # trạng thái EXPIRED, đúng cổng
     f = sc.scan("TK007", "GATE_A", ms("19:00:00"))   # UNUSED, sai cổng, còn giờ
     g = sc.scan("TK008", "GATE_D", ms("19:00:00"))   # vé không giới hạn cổng
-    h = sc.scan("TK001", "GATE_A", ms("20:00:00"))   # đúng 20:00:00 -> đã hết giờ
+    h = sc.scan("TK001", "GATE_A", ms("20:00:00"))   # đúng 20:00:00.000 -> vẫn trong giờ
     i = sc.scan("TK010", "GATE_A", ms("18:00:00"))   # đúng 18:00:00 -> trong giờ
+    j = sc.scan("TK011", "GATE_B", ms("20:00:00.001"))  # 1 ms sau 20:00:00 -> hết giờ
     r = sc.run()
     check("CANCELLED quét sau giờ -> CANCELLED (bước 2 trước 4)", r[a], scan_result="CANCELLED")
     check("VALID_ENTRY quét sau giờ -> USED (bước 3 trước 4)", r[b], scan_result="USED",
@@ -213,8 +216,34 @@ def run_all(spark):
           alert_code="WRONG_GATE_WARNING", distinct_wrong_gate_count=1, ticket_assigned_gate_id="GATE_C",
           ticket_status_after="UNUSED")
     check("Vé không giới hạn cổng -> VALID", r[g], scan_result="VALID", ticket_assigned_gate_id=None)
-    check("Đúng 20:00:00 (admission_end) -> EXPIRED", r[h], scan_result="EXPIRED")
+    check("B1: đúng 20:00:00.000 (admission_end) -> vẫn trong giờ, VALID", r[h], scan_result="VALID",
+          ticket_status_after="VALID_ENTRY")
+    check("B1: 20:00:00.001 -> EXPIRED", r[j], scan_result="EXPIRED", ticket_status_after="UNUSED")
     check("Đúng 18:00:00 (admission_start) -> VALID", r[i], scan_result="VALID")
+
+    print("\n== B1: ba ca ranh giới ==")
+    # (1) TC08 hai phía ngưỡng A<->D 140 000 ms: đúng bằng -> DUPLICATE_SCAN, kém 1 ms -> IMPOSSIBLE_TRAVEL
+    for name, at, code in [("B1: cách đúng 140 000 ms -> DUPLICATE_SCAN", "19:02:21.000", "DUPLICATE_SCAN"),
+                           ("B1: cách 139 999 ms -> IMPOSSIBLE_TRAVEL", "19:02:20.999", "IMPOSSIBLE_TRAVEL")]:
+        sc = Scenario(spark)
+        sc.status["TK001"] = "VALID_ENTRY"
+        sc.valid.append(("TK001", "00000000-0000-4000-8000-000000000001", "GATE_A", ms("19:00:01")))
+        a = sc.scan("TK001", "GATE_D", ms(at))
+        r = sc.run()
+        check(name, r[a], scan_result="USED", alert_code=code, min_travel_time_ms=140_000,
+              time_since_previous_scan_ms=ms(at) - ms("19:00:01"))
+    # (2) Mốc 20:00:00 đã kiểm ở trên. Vé đã vào rồi quét lại đúng 20:00:00 vẫn là USED (bước 3)
+    # (3) Cổng sai thứ N-1 = 3 ra WRONG_GATE_FRAUD nhưng vé vẫn UNUSED, sau đó vẫn vào đúng cổng được
+    sc = Scenario(spark)
+    sc.wrong += [("TK007", "GATE_A"), ("TK007", "GATE_B")]
+    a = sc.scan("TK007", "GATE_D", ms("19:30:00"))
+    b = sc.scan("TK007", "GATE_C", ms("20:00:00"))
+    r = sc.run()
+    check("B1: cổng sai thứ 3 (N-1) -> WRONG_GATE_FRAUD, vé vẫn UNUSED", r[a], scan_result="WRONG_GATE",
+          alert_code="WRONG_GATE_FRAUD", alert_level="FRAUD", distinct_wrong_gate_count=3,
+          ticket_status_before="UNUSED", ticket_status_after="UNUSED")
+    check("B1: sau đó quét đúng cổng lúc 20:00:00 -> VALID", r[b], scan_result="VALID",
+          ticket_status_before="UNUSED", ticket_status_after="VALID_ENTRY")
 
     print("\n== Nhiều lượt cùng vé trong MỘT batch ==")
     sc = Scenario(spark)

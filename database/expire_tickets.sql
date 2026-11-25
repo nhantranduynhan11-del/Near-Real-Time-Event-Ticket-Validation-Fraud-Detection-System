@@ -14,8 +14,9 @@ FROM   dbo.ticket AS t
 JOIN   dbo.[event] AS e ON e.event_id = t.event_id
 WHERE  t.event_id = @event_id
   AND  t.ticket_status = N'UNUSED'
-  -- Cùng mốc với Spark: received_at >= admission_end là đã hết giờ (20:00:00.000 đã là EXPIRED)
-  AND  @now >= e.admission_end;
+  -- Cùng mốc với Spark: giờ nhận khách tính cả admission_end (20:00:00.000 vẫn còn trong giờ),
+  -- nên chỉ chuyển EXPIRED khi đã QUA admission_end
+  AND  @now > e.admission_end;
 
 PRINT N'Số vé chuyển sang EXPIRED: ' + CAST(@@ROWCOUNT AS NVARCHAR(10));
 

@@ -154,34 +154,40 @@ Yêu cầu hệ thống đang chạy ở chế độ `full` (`./scripts/up.sh fu
 RESET_MODE=full ./scripts/run_test_cases.sh  # reset toàn phần (chạy reset.sh -y và bật lại Spark mỗi ca)
 ```
 
+Ba ca ranh giới của B1 (cách đúng 140 000 ms ra `DUPLICATE_SCAN`, quét đúng giờ kết thúc nhận khách vẫn còn trong giờ, cổng sai thứ N−1 ra `WRONG_GATE_FRAUD` mà vé vẫn `UNUSED`) chạy riêng bằng `./scripts/test_boundaries.sh` (cần `./scripts/up.sh stream`; script xóa dữ liệu quét và tắt Spark).
+
 Script tự động đăng nhập các tài khoản cổng, tạm thời mở khung giờ nhận khách của `EV001` nếu chạy ngoài giờ sự kiện, reset dữ liệu trước mỗi ca và in bảng tổng hợp `Expected / Actual / Kết quả` cho cả 8 ca. Báo cáo kiểm thử chi tiết nằm tại `docs/test_report.md`.
 
 ## 7. Đo tải, Đo chỉ mục (Index) và Theo dõi hệ thống (Monitoring)
 
-### 7.1 Đo tải và độ trễ xử lý (Role B)
+### 7.1 Đo tải (B2)
 
-Đảm bảo pipeline đang chạy (`./scripts/up.sh full` hoặc `./scripts/up.sh stream`) và khung giờ nhận khách bao phủ thời điểm hiện tại:
+Pipeline phải đang chạy liên tục (`./scripts/up.sh full` hoặc `stream`, đợi Spark in `[pipeline] Đang chạy`), khung giờ nhận khách bao trùm bây giờ:
 
 ```bash
 ./scripts/dev_event_window.sh now
-
-# Đo mặc định 100 lượt (mỗi 200 ms một lượt ~ 5 lượt/giây)
-./scripts/measure_ingestion_lag.sh
-
-# Đo ở mức tải cao hơn (ví dụ 25 lượt/giây trong 2 phút = 3000 lượt, mỗi 40 ms)
-N=3000 INTERVAL_MS=40 ./scripts/measure_ingestion_lag.sh
+python3 scripts/load_test.py                          # 25 lượt/giây x 120 giây = 3000 lượt
+python3 scripts/load_test.py --rate 40 --duration 180 # mức khác
+./scripts/dev_event_window.sh demo                    # trả lại giờ demo
 ```
 
-Trong lúc script đo tải đang chạy, có thể mở `http://localhost:3000/app.html#dashboard` để quan sát tổng lượt quét, tỷ lệ gian lận và biểu đồ theo cổng tăng liên tục theo thời gian thực. Số liệu tổng hợp và biểu đồ độ trễ được ghi tại `docs/ingestion_lag.md` và `docs/performance.md`.
+Script gửi thẳng vào Kafka với tốc độ cố định, ghi CPU/RAM của Spark, SQL Server, Kafka, API mỗi 2 giây, rồi đọc độ trễ từng lượt từ `scan_event`. Kết quả: `docs/performance.md` (thông lượng, độ trễ TB/P50/P95/P99/lớn nhất, CPU/RAM, cấu hình máy), biểu đồ `docs/images/performance_latency.svg`, số liệu thô trong `docs/performance_data/`. Trong lúc đo, mở `http://localhost:3000/app.html#dashboard` để xem số liệu tăng dần. Đừng quét thêm trong lúc đo.
 
-### 7.2 Theo dõi hệ thống (Monitoring — Role B)
+`./scripts/measure_ingestion_lag.sh` vẫn dùng được để đo nhanh 100 lượt (`docs/ingestion_lag.md`).
 
-In nhanh các truy vấn chạy chậm nhất, kích thước và số dòng từng bảng, độ trễ pipeline của các lượt quét gần nhất và số bản tin lỗi trong `scan-events-dlq`:
+### 7.2 Theo dõi hệ thống (B3)
+
+Một lệnh in ra: truy vấn chạy chậm nhất, kích thước và số dòng từng bảng, độ trễ pipeline của các lượt quét gần nhất (kèm Spark còn chạy không, còn tồn bao nhiêu bản tin, Gold có theo kịp không), và số bản tin trong DLQ chia theo lý do:
 
 ```bash
-./scripts/monitor.sh
+./scripts/monitor.sh              # in ra màn hình
+./scripts/monitor.sh -n 500       # độ trễ tính trên 500 lượt gần nhất
+./scripts/monitor.sh --save       # in ra và ghi làm ví dụ vào docs/monitoring.md
 ```
-Ví dụ kết quả được lưu tại `docs/monitoring.md`.
+
+### 7.2b Spark dùng tài khoản database riêng (B4)
+
+Sau khi `database/security.sql` tạo tài khoản cho Spark, điền vào `docker/.env` **cả hai** biến `SPARK_DB_USER` và `SPARK_DB_PASSWORD` rồi bật lại Spark. Để trống cả hai thì Spark dùng `DB_USER` (`sa`). Lúc khởi động Spark tự kiểm quyền: thiếu quyền thì in sẵn câu `GRANT` cần chạy (bằng `sa`) rồi dừng; thiếu riêng quyền `EXECUTE` trên `dbo.usp_refresh_gold` thì chỉ cảnh báo vì Silver vẫn chạy, nhưng Gold sẽ đứng yên.
 
 ### 7.3 Sinh dữ liệu lớn 300.000 dòng để đo Index (Role A)
 

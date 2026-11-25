@@ -139,7 +139,18 @@ def main():
     p.add_argument("--topic", default=os.environ.get("KAFKA_TOPIC", "scan-events"))
     p.add_argument("--dry-run", action="store_true", help="chỉ in bản tin, không gửi")
     p.add_argument("--qr", metavar="MÃ_VÉ", help="chỉ in chuỗi QR đã ký của một vé rồi thoát")
+    p.add_argument("--base", metavar="ISO",
+                   help="mốc 'bây giờ' cố định thay cho giờ máy, ISO 8601 có múi giờ, "
+                        "vd 2026-11-25T19:50:00.000+07:00 (dùng để thử ranh giới giờ nhận khách)")
     args = p.parse_args()
+    fixed_base = None
+    if args.base:
+        try:
+            fixed_base = datetime.fromisoformat(args.base)
+        except ValueError:
+            p.error(f"--base '{args.base}' không phải ISO 8601")
+        if fixed_base.tzinfo is None:
+            p.error("--base phải có múi giờ, vd +07:00")
 
     secret = qr_secret()
     if args.qr:
@@ -164,12 +175,13 @@ def main():
     sent = []
     # Mọi SPEC của một lần chạy dùng CHUNG một mốc "bây giờ", nên GIÂY là khoảng cách chính xác
     # tới từng mili giây (TC08 cần cách đúng 140 000 ms). Có --interval-ms thì lấy giờ lúc gửi.
-    base = datetime.now(VN)
+    base = fixed_base or datetime.now(VN)
     try:
         for i, (ticket, gate, offset_s) in enumerate(specs):
             if i and args.interval_ms:
                 time.sleep(args.interval_ms / 1000)
-                base = datetime.now(VN)
+                if fixed_base is None:
+                    base = datetime.now(VN)
             ev = make_event(ticket, gate, base + timedelta(seconds=offset_s), args.operator, secret)
             line = f"{ev['ticket_id'] or ''}|{json.dumps(ev, ensure_ascii=False)}\n"
             if proc:

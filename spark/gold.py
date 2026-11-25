@@ -27,9 +27,11 @@ def _procedure_available(db):
         _state["available"] = bool(rows)
         _state["checked"] = True
         if not _state["available"]:
-            print("[gold] Chưa có dbo.usp_refresh_gold trong DB, bỏ qua Gold. Dựng lại DB để nạp "
-                  "init.sql mới: docker compose -f docker/docker-compose.yml --env-file docker/.env "
-                  "--profile full down -v, rồi ./scripts/up.sh full", flush=True)
+            # OBJECT_ID trả NULL cả khi thủ tục chưa có lẫn khi tài khoản không có quyền trên nó
+            print("[gold] Không thấy dbo.usp_refresh_gold, bỏ qua Gold. Một trong hai lý do: (1) DB dựng "
+                  "từ init.sql cũ: docker compose -f docker/docker-compose.yml --env-file docker/.env "
+                  "--profile full down -v, rồi ./scripts/up.sh full; (2) tài khoản Spark chưa có quyền: "
+                  "GRANT EXECUTE ON dbo.usp_refresh_gold TO <tài khoản Spark>", flush=True)
     return _state["available"]
 
 

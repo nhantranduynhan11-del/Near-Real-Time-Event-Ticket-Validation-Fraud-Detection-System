@@ -63,6 +63,11 @@ Xử lý tuần tự, **dừng ở bước đầu tiên khớp điều kiện**:
 Mốc thời gian dùng ở bước 4 và 5 là `received_at` (đồng hồ server), **không phải** `scanned_at`
 (đồng hồ máy quét, có thể lệch) — xem `08_Scan_Event_Specification.md`.
 
+"Còn trong giờ nhận khách" tính **cả hai đầu**: `admission_start <= received_at <= admission_end`
+(nhóm chốt 25/11). Với EV001, quét đúng 20:00:00.000 vẫn còn trong giờ, 20:00:00.001 mới là hết giờ.
+Tiến trình chuyển vé sang `EXPIRED` (`database/expire_tickets.sql`) dùng cùng mốc: chỉ chuyển khi đã
+**qua** `admission_end`.
+
 ### Giải thích thứ tự
 
 **Bước 2 và 3 đứng trước 4 và 5** vì `CANCELLED`, `VALID_ENTRY`, `FLAGGED_FRAUD` là những trạng thái

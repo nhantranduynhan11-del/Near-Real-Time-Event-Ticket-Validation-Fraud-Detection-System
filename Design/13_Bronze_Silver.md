@@ -177,7 +177,7 @@ Các lượt quét của cùng một vé được xử lý lần lượt theo `r
 | Chỗ tài liệu chưa nói rõ | Chọn |
 |---|---|
 | `ticket_status_before/after` của lượt `INVALID` | `NULL` cả hai, kể cả vé có thật của sự kiện khác, vì `ticket_id` đã bị gán `NULL` |
-| Ranh giới giờ nhận khách | Tính cả `admission_start`, không tính `admission_end`: quét lúc 20:00:00.000 là `EXPIRED` |
+| Ranh giới giờ nhận khách | Tính **cả hai đầu** (nhóm chốt 25/11, file 07): quét đúng 20:00:00.000 vẫn còn trong giờ, từ 20:00:00.001 là `EXPIRED`. `expire_tickets.sql` chỉ chuyển vé khi đã qua `admission_end` |
 | So khớp mã vé | Phân biệt hoa thường: `tk001` ra `INVALID`, dù collation CI của DB coi là `TK001` (file 15 mục 0 cũng từ chối chữ thường) |
 | `previous_scan_event_id` của lượt quét thứ ba trở đi | Vẫn trỏ về lượt `VALID` duy nhất của vé (file 08: "lần quét hợp lệ trước đó"), R4 cũng đo từ lượt đó |
 | `distinct_wrong_gate_count` | Chỉ ghi khi `WRONG_GATE`. Không bao giờ tính cổng đang được gán của vé. Ngưỡng FRAUD viết `>= N − 1` để khỏi lọt khi có cổng ngoài sự kiện |
@@ -186,14 +186,31 @@ Các lượt quét của cùng một vé được xử lý lần lượt theo `r
 | `processing_ts` | Giờ Spark ngay trước khi ghi. Nếu nhỏ hơn `received_at` vài ms do lệch đồng hồ thì lấy bằng `received_at` |
 | Chữ ký HMAC của QR | Đã chốt ở file 15 ("Định dạng mã QR và cách ký"): **API** kiểm chữ ký trong `POST /scan`. Chữ ký sai thì API gửi `decode_error = true`, `ticket_id = null`, nên Spark ra `INVALID` / `INVALID_QR` ở bước 1. Spark **không** kiểm lại chữ ký và không cần `QR_HMAC_SECRET` (secret chỉ nằm ở API). `raw_qr_payload` được chép nguyên văn, kể cả chuỗi sai chữ ký, để người giám sát xem lại |
 
+### D.6b Tài khoản database của Spark (B4)
+
+Spark đọc `SPARK_DB_USER`/`SPARK_DB_PASSWORD` trong `docker/.env`; để trống cả hai thì dùng `DB_USER` (`sa`), chỉ điền một trong hai là lỗi cấu hình. Lúc khởi động, `check_permissions()` trong `spark/stream_scan_events.py` kiểm bằng `HAS_PERMS_BY_NAME` đúng các quyền Spark cần:
+
+| Bảng / thủ tục | Quyền | Để làm gì |
+|---|---|---|
+| `ticket` | SELECT, UPDATE | tra và khóa vé; đổi `ticket_status` |
+| `scan_event` | SELECT, INSERT | bỏ lượt đã ghi, đọc lượt VALID và cổng sai; ghi Silver |
+| `fraud_alert` | INSERT | ghi cảnh báo |
+| `event`, `event_gate`, `gate_travel_time`, `scanner`, `app_user` | SELECT | khung giờ, số cổng N, R4, cặp máy quét - cổng, nhân viên |
+| `usp_refresh_gold` | EXECUTE | tính lại Gold (thủ tục chạy bằng quyền dbo nên Spark không cần quyền trực tiếp trên bảng Gold) |
+
+Thiếu quyền Silver thì Spark in câu `GRANT` còn thiếu rồi dừng; thiếu riêng `EXECUTE` thì cảnh báo và Gold đứng yên.
+
 ### D.7 Chạy và kiểm thử
 
 ```bash
-.venv/bin/python spark/tests/test_silver_logic.py   # luật Silver, không cần Docker (39 ca, có TC01-TC08)
+.venv/bin/python spark/tests/test_silver_logic.py   # luật Silver, không cần Docker (45 ca, có TC01-TC08 và ca ranh giới B1)
 ./scripts/up.sh stream                              # SQL Server + Kafka + pipeline Spark
 ./scripts/test_silver.sh                            # đầu-cuối: đủ 6 kết quả, cùng batch, khác batch
 ./scripts/test_silver_restart.sh                    # kill -9 giữa chừng rồi bật lại
+./scripts/test_boundaries.sh                        # B1: 140 000 ms, mốc cuối giờ nhận khách, cổng sai N-1
 ./scripts/measure_ingestion_lag.sh                  # đo ingestion_lag_ms của 100 lượt -> docs/
+python3 scripts/load_test.py                        # B2: đo tải một mức -> docs/performance.md
+./scripts/monitor.sh                                # B3: theo dõi DB, pipeline, DLQ
 ```
 
 Thử trước ngày demo: CHECK `processing_ts >= received_at` không cho ghi lượt quét có giờ nhận ở tương lai. Vì vậy `./scripts/dev_event_window.sh now` dời khung giờ của `ACTIVE_EVENT_ID` về quanh hiện tại, còn `scripts/send_scans.py VÉ@CỔNG@-GIÂY` gửi giờ nhận tính lùi từ bây giờ. Xong việc thì `./scripts/dev_event_window.sh demo` để trả lại giờ demo.
