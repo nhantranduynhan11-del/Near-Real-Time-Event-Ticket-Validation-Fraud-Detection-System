@@ -39,4 +39,6 @@ GRANT SELECT ON dbo.event_gate TO spark_user;
 GRANT SELECT ON dbo.gate TO spark_user;
 GRANT SELECT ON dbo.scanner TO spark_user;
 GRANT SELECT ON dbo.gate_travel_time TO spark_user;
+GRANT SELECT ON dbo.app_user TO spark_user;
+GRANT EXECUTE ON dbo.usp_refresh_gold TO spark_user;
 GO
