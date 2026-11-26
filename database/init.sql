@@ -310,18 +310,13 @@ BEGIN
 
     DECLARE @now DATETIME2(3) = DATEADD(HOUR, 7, SYSUTCDATETIME());
     DECLARE @epoch DATETIME2(3) = '19000101';
-    DECLARE @lock_name NVARCHAR(255) = N'usp_refresh_gold:' + @event_id;
-    DECLARE @lock_result INT;
+    DECLARE @locked NVARCHAR(20);
+
+    SET LOCK_TIMEOUT 15000;
 
     BEGIN TRANSACTION;
 
-    EXEC @lock_result = sp_getapplock
-        @Resource = @lock_name,
-        @LockMode = 'Exclusive',
-        @LockOwner = 'Transaction',
-        @LockTimeout = 15000;
-    IF @lock_result < 0
-        THROW 50002, N'usp_refresh_gold: không lấy được khóa, đợt khác đang tính.', 1;
+    SELECT @locked = event_id FROM dbo.[event] WITH (UPDLOCK, HOLDLOCK) WHERE event_id = @event_id;
 
     DELETE FROM dbo.gold_gate_stats WHERE event_id = @event_id;
 
@@ -397,6 +392,22 @@ BEGIN
 
     COMMIT TRANSACTION;
 END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_scan_event_ticket_result' AND object_id = OBJECT_ID(N'dbo.scan_event'))
+    CREATE INDEX IX_scan_event_ticket_result ON dbo.scan_event (ticket_id, scan_result) INCLUDE (gate_id, received_at);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_scan_event_received_at' AND object_id = OBJECT_ID(N'dbo.scan_event'))
+    CREATE INDEX IX_scan_event_received_at ON dbo.scan_event (received_at);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_scan_event_gold_cover' AND object_id = OBJECT_ID(N'dbo.scan_event'))
+    CREATE INDEX IX_scan_event_gold_cover ON dbo.scan_event (event_id) INCLUDE (gate_id, scan_result, alert_level, received_at);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ticket_event_status' AND object_id = OBJECT_ID(N'dbo.ticket'))
+    CREATE INDEX IX_ticket_event_status ON dbo.ticket (event_id, ticket_status);
 GO
 
 PRINT N'init.sql: hoàn tất.';
