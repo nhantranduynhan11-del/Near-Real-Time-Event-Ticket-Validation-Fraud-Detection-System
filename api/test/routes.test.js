@@ -78,10 +78,13 @@ let scanRow = {
   alert_level: 'NONE',
   alert_code: null,
   ticket_assigned_gate_id: 'GATE_A',
+  previous_scan_gate_id: null,
+  time_since_previous_scan_ms: null,
 };
 
 let gateRow = { gate_id: 'GATE_A' };
 let scannerRow = { scanner_id: 'SC_A1', gate_id: 'GATE_A' };
+let goldAlerts = [];
 
 const sent = [];
 
@@ -122,6 +125,67 @@ function fakeQuery(sqlText, params) {
           : [],
     };
   }
+  if (text.includes('FROM EVENT e')) {
+    return {
+      recordset:
+        params.id === 'EV001'
+          ? [{
+              event_id: 'EV001',
+              event_name: 'Concert Demo',
+              admission_start: at(18, 0, 0),
+              admission_end: at(20, 0, 0),
+              gate_count: 2,
+            }]
+          : [],
+    };
+  }
+  if (text.includes('FROM GOLD_EVENT_STATS')) {
+    return {
+      recordset: [{
+        total_scans: 0,
+        fraud_count: 0,
+        warning_count: 0,
+        cnt_valid: 0,
+        cnt_invalid: 0,
+        cnt_used: 0,
+        cnt_cancelled: 0,
+        cnt_expired: 0,
+        cnt_wrong_gate: 0,
+        updated_at: null,
+      }],
+    };
+  }
+  if (text.includes('FROM GATE g')) {
+    return {
+      recordset: [
+        {
+          gate_id: 'GATE_A',
+          gate_name: 'Cổng A',
+          total_scans: 0,
+          valid_entries: 0,
+          rejected_scans: 0,
+          fraud_count: 0,
+          warning_count: 0,
+          last_scan_at: null,
+          updated_at: null,
+        },
+        {
+          gate_id: 'GATE_B',
+          gate_name: 'Cổng B',
+          total_scans: 0,
+          valid_entries: 0,
+          rejected_scans: 0,
+          fraud_count: 0,
+          warning_count: 0,
+          last_scan_at: null,
+          updated_at: null,
+        },
+      ],
+    };
+  }
+  if (text.includes('FROM GOLD_ALERT')) {
+    return { recordset: goldAlerts };
+  }
   return { recordset: [] };
 }
 
@@ -150,6 +214,7 @@ app.use(express.json());
 app.use('/api/login', require('../src/routes/login'));
 app.use('/api/tickets', require('../src/routes/tickets'));
 app.use('/api/scan', require('../src/routes/scan'));
+app.use('/api/dashboard', require('../src/routes/dashboard'));
 app.use(errorHandler);
 
 let server;
@@ -233,6 +298,8 @@ test('POST /api/scan kiểm chữ ký, ghi đè ticket_id và trả kết quả'
     alert_level: 'NONE',
     alert_code: null,
     ticket_assigned_gate_id: 'GATE_A',
+    previous_scan_gate_id: null,
+    time_since_previous_scan_ms: null,
   };
 
   const res = await call('/api/scan', opToken, {
@@ -370,46 +437,130 @@ test('GET /api/scan/:id lạ trả 404 SCAN_NOT_FOUND', async () => {
 });
 
 // --- TEST CHO C1 ---
-describe('C1: Scan Response Fields', () => {
-  test('Khi scan_result là USED, phải trả về previous_scan_gate_id và time_since_previous_scan_ms', () => {
-    // Giả lập logic của hàm completedBody trong scan.js
-    const mockRow = {
-      scan_event_id: '123e4567-e89b-12d3-a456-426614174000',
-      received_at: new Date(),
-      scan_result: 'USED',
-      alert_level: 'FRAUD',
-      alert_code: 'DUPLICATE_SCAN',
-      previous_scan_gate_id: 'GATE_A',
-      time_since_previous_scan_ms: 5000
-    };
-    const body = {
-      scan_event_id: mockRow.scan_event_id,
-      previous_scan_gate_id: mockRow.scan_result === 'USED' ? mockRow.previous_scan_gate_id : null,
-      time_since_previous_scan_ms: mockRow.scan_result === 'USED' ? mockRow.time_since_previous_scan_ms : null,
-    };
-    expect(body.previous_scan_gate_id).toBe('GATE_A');
-    expect(body.time_since_previous_scan_ms).toBe(5000);
+test('C1: Khi scan_result là USED, phải trả về previous_scan_gate_id và time_since_previous_scan_ms', async () => {
+  sent.length = 0;
+  scanRow = {
+    scan_event_id: '44444444-4444-4444-8444-444444444444',
+    received_at: at(19, 0, 6),
+    scan_result: 'USED',
+    alert_level: 'FRAUD',
+    alert_code: 'DUPLICATE_SCAN',
+    ticket_assigned_gate_id: 'GATE_A',
+    previous_scan_gate_id: 'GATE_A',
+    time_since_previous_scan_ms: 5000
+  };
+  const res = await call('/api/scan', opToken, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      raw_qr_payload: signTicketQr('TK001', QR_SECRET),
+      ticket_id: 'TK001',
+      decode_error: false,
+      gate_id: 'GATE_A',
+      scanner_id: 'SC_A1',
+      scanned_at: '2026-12-12T19:00:06.000+07:00',
+    }),
   });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.previous_scan_gate_id, 'GATE_A');
+  assert.equal(body.time_since_previous_scan_ms, 5000);
+});
 
-  test('Khi scan_result KHÁC USED, hai trường này phải là null', () => {
-    const mockRow = {
-      scan_result: 'VALID',
-      previous_scan_gate_id: 'GATE_A', // Giả sử trong DB có nhưng không được trả ra
-      time_since_previous_scan_ms: 5000
-    };
-    const body = {
-      previous_scan_gate_id: mockRow.scan_result === 'USED' ? mockRow.previous_scan_gate_id : null,
-      time_since_previous_scan_ms: mockRow.scan_result === 'USED' ? mockRow.time_since_previous_scan_ms : null,
-    };
-    expect(body.previous_scan_gate_id).toBeNull();
-    expect(body.time_since_previous_scan_ms).toBeNull();
+test('C1: Khi scan_result KHÁC USED, hai trường này phải là null', async () => {
+  sent.length = 0;
+  scanRow = {
+    scan_event_id: '55555555-5555-4555-8555-555555555555',
+    received_at: at(19, 0, 7),
+    scan_result: 'VALID',
+    alert_level: 'NONE',
+    alert_code: null,
+    ticket_assigned_gate_id: 'GATE_A',
+    previous_scan_gate_id: 'GATE_A',
+    time_since_previous_scan_ms: 5000
+  };
+  const res = await call('/api/scan', opToken, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      raw_qr_payload: signTicketQr('TK001', QR_SECRET),
+      ticket_id: 'TK001',
+      decode_error: false,
+      gate_id: 'GATE_A',
+      scanner_id: 'SC_A1',
+      scanned_at: '2026-12-12T19:00:07.000+07:00',
+    }),
   });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.previous_scan_gate_id, null);
+  assert.equal(body.time_since_previous_scan_ms, null);
 });
 
 // --- TEST CHO C2 ---
-describe('C2: Dashboard API', () => {
-  test('Không có token phải trả về 401', async () => {
-    // Lưu ý: Test này yêu cầu bạn đã export app từ index.js, nếu chưa thì chỉ cần giữ làm ví dụ
-    expect(true).toBe(true); 
+test('C2: GET /api/dashboard/live không token phải trả về 401', async () => {
+  const res = await call('/api/dashboard/live');
+  assert.equal(res.status, 401);
+});
+
+test('C2: GET /api/dashboard/live sai vai trò (Operator) phải trả về 403', async () => {
+  const res = await call('/api/dashboard/live', opToken);
+  assert.equal(res.status, 403);
+});
+
+test('C2: GET /api/dashboard/live khi Gold trống trả toàn 0 và đủ 6 khóa by_result', async () => {
+  goldAlerts = [];
+  const res = await call('/api/dashboard/live', supToken);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+
+  assert.equal(body.totals.total_scans, 0);
+  assert.equal(body.totals.fraud_count, 0);
+  assert.equal(body.totals.warning_count, 0);
+  assert.equal(body.totals.fraud_rate, 0);
+  assert.equal(body.totals.updated_at, null);
+  assert.deepEqual(body.totals.by_result, {
+    VALID: 0,
+    INVALID: 0,
+    USED: 0,
+    CANCELLED: 0,
+    EXPIRED: 0,
+    WRONG_GATE: 0,
   });
+  assert.equal(body.gates.length, 2);
+  for (const g of body.gates) {
+    assert.equal(g.total_scans, 0);
+    assert.equal(g.valid_entries, 0);
+    assert.equal(g.rejected_scans, 0);
+    assert.equal(g.fraud_count, 0);
+    assert.equal(g.warning_count, 0);
+    assert.equal(g.fraud_rate, 0);
+  }
+  assert.deepEqual(body.latest_alerts, []);
+});
+
+test('C2: GET /api/dashboard/live trả scan_event_id chữ thường', async () => {
+  goldAlerts = [{
+    scan_event_id: 'AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE',
+    created_at: at(19, 0, 5),
+    received_at: at(19, 0, 4),
+    alert_level: 'FRAUD',
+    alert_code: 'INVALID_QR',
+    scan_result: 'INVALID',
+    ticket_id: null,
+    gate_id: 'GATE_A',
+    scanner_id: 'SC_A1',
+    previous_scan_gate_id: null,
+    time_since_previous_scan_ms: null,
+    min_travel_time_ms: null,
+    ticket_assigned_gate_id: null,
+    distinct_wrong_gate_count: null,
+    raw_qr_preview: 'TK001.bad',
+  }];
+  const res = await call('/api/dashboard/live', supToken);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.latest_alerts.length, 1);
+  assert.equal(body.latest_alerts[0].scan_event_id, 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+  goldAlerts = [];
 });

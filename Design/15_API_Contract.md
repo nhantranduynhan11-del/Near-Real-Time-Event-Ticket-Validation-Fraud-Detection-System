@@ -358,7 +358,9 @@ API chờ tối đa `SCAN_WAIT_MS` (mặc định 3000 ms, hỏi lại `scan_eve
   "entry": "DENY",
   "alert_level": "FRAUD",
   "alert_code": "IMPOSSIBLE_TRAVEL",
-  "ticket_assigned_gate_id": null
+  "ticket_assigned_gate_id": null,
+  "previous_scan_gate_id": "GATE_A",
+  "time_since_previous_scan_ms": 3000
 }
 ```
 
@@ -368,6 +370,8 @@ API chờ tối đa `SCAN_WAIT_MS` (mặc định 3000 ms, hỏi lại `scan_eve
 | `entry` | `ALLOW` khi `scan_result = VALID`, còn lại `DENY`. Thiết bị chỉ cần đọc trường này để mở hay giữ khách |
 | `alert_level`, `alert_code` | Như file 07; `NONE` và `null` khi không có cảnh báo |
 | `ticket_assigned_gate_id` | API chỉ trả giá trị khi `scan_result = WRONG_GATE` (để nhân viên chỉ khách tới đúng cổng), các trường hợp khác trả `null` |
+| `previous_scan_gate_id` | API chỉ trả giá trị khi `scan_result = USED` (cổng của lượt quét `VALID` trước đó), các trường hợp khác trả `null` |
+| `time_since_previous_scan_ms` | API chỉ trả giá trị khi `scan_result = USED` (số mili giây kể từ lượt quét `VALID` trước đó), các trường hợp khác trả `null` |
 
 **Phản hồi `202` — chưa xử lý xong sau `SCAN_WAIT_MS`**
 
