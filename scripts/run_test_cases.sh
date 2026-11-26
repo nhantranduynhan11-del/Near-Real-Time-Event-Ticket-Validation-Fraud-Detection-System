@@ -53,7 +53,7 @@ log() { printf '%s\n' "$*" >&2; }
 die() { log "LỖI: $*"; exit 1; }
 
 now_iso()  { TZ=Asia/Ho_Chi_Minh date -d "${1:-now}" +%Y-%m-%dT%H:%M:%S.%3N%:z; }
-epoch_ms() { date -d "$1" +%s%3N; }
+epoch_ms() { echo $(( $(date -d "$1" +%s%N) / 1000000 )); }
 
 http() { # http METHOD PATH [TOKEN] [BODY]  ->  HTTP_CODE, HTTP_BODY
   local method=$1 path=$2 token=${3:-} body=${4:-}
@@ -110,7 +110,7 @@ prepare_window() {
   local s e now margin
   s=$(epoch_ms "$(jq -r '.admission_start' <<<"$ORIG_EVENT")")
   e=$(epoch_ms "$(jq -r '.admission_end' <<<"$ORIG_EVENT")")
-  now=$(date +%s%3N)
+  now=$(( $(date +%s%N) / 1000000 ))
   margin=$(( (TC08_GAP_SECONDS + 300) * 1000 ))
   if (( now >= s && now + margin <= e )); then
     log "Giờ nhận khách của $EVENT_ID đang bao phủ lúc chạy, giữ nguyên."
@@ -307,7 +307,7 @@ tc08() { # R4 không báo nhầm: cùng vé, hai cổng xa nhau, cách bằng ho
   first_ms=$(epoch_ms "$first")
   target=$(( first_ms + TC08_GAP_SECONDS * 1000 + 500 ))
   log "   TC08: chờ ${TC08_GAP_SECONDS} giây giữa hai lượt quét..."
-  while now_ms=$(date +%s%3N); (( now_ms < target )); do sleep 1; done
+  while now_ms=$(( $(date +%s%N) / 1000000 )); (( now_ms < target )); do sleep 1; done
   scan TK001 GATE_D || { fail_case TC08 "$S_ERR"; return; }
   local gap_ms=$(( $(epoch_ms "$S_RECEIVED") - first_ms ))
   if (( gap_ms < TC08_GAP_SECONDS * 1000 )); then
