@@ -3,6 +3,11 @@
 Ví dụ kết quả chạy `./scripts/monitor.sh --save` lúc 2026-11-26 22:54 (giờ Việt Nam).
 Ý nghĩa từng phần: xem đầu tệp `scripts/monitor.sh` và mục 7.2 của README.
 
+> Dòng đầu của bảng 1 (`SELECT db_id() as database_id, sm.[is_inlineable] …`, 551 ms) là truy vấn thống kê
+> định kỳ của chính SQL Server, không phải của API, Spark hay Gold. Bản `monitor.sh` sau ngày 26/11 lọc bỏ
+> câu này. Truy vấn chậm nhất của hệ thống là câu API hỏi kết quả lượt quét (`SELECT LOWER(CONVERT(...
+> scan_event_id))`, TB 56.0 ms) và câu đọc tổng số của dashboard (TB 7.5 ms trên 60 lần).
+
 ```text
 Theo dõi hệ thống — 2026-11-26 22:54:40 (giờ Việt Nam), ACTIVE_EVENT_ID=EV001
 

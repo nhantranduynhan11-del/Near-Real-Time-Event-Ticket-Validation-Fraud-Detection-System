@@ -66,9 +66,12 @@ report() {
          CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st
          CROSS APPLY sys.dm_exec_plan_attributes(qs.plan_handle) AS pa
          WHERE pa.attribute = N'dbid' AND CAST(pa.value AS INT) = DB_ID()
-           -- Bỏ câu đọc catalog hệ thống (sys.*): truy vấn thống kê định kỳ của chính SQL Server và
-           -- của monitor.sh. Câu của API, Spark, Gold không đụng sys.*.
+           -- Bỏ câu đọc catalog hệ thống: truy vấn thống kê định kỳ của chính SQL Server (bắt đầu bằng
+           -- SELECT db_id() as database_id, có câu viết [sys].[...] nên lọc cả hai dạng) và của
+           -- monitor.sh. Câu của API, Spark, Gold không đụng sys.*. [[] trong LIKE là dấu [ thật.
            AND st.text NOT LIKE N'%sys.%'
+           AND st.text NOT LIKE N'%[[]sys].%'
+           AND st.text NOT LIKE N'%db_id() as database_id%'
          ORDER BY qs.total_elapsed_time / qs.execution_count DESC;"
   } | table
 

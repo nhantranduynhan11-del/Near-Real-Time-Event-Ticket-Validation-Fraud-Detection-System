@@ -50,6 +50,30 @@ CPU tính theo phần trăm của một lõi (200% = dùng trọn 2 lõi), giố
 
 Số liệu thô: `docs/performance_data/scans.csv`, `docs/performance_data/resources.csv`.
 
+## Đọc kết quả
+
+Phần này viết tay từ `docs/performance_data/scans.csv` (chạy lại `load_test.py` sẽ ghi đè cả tệp).
+
+| Giai đoạn | Số lượt | Độ trễ TB | P50 | P95 | P99 | Lớn nhất | Vượt 3,000 ms |
+|---|---|---|---|---|---|---|---|
+| 10 giây đầu | 250 | 6,242 ms | - | 8,954 ms | - | 9,435 ms | 100% |
+| Từ giây 20 trở đi (ổn định) | 2,500 | 2,396 ms | 2,330 ms | 3,648 ms | 4,248 ms | 4,679 ms | 18.0% |
+| Cả lần đo | 3,000 | 2,785 ms | 2,488 ms | 5,676 ms | 8,235 ms | 9,435 ms | 28.4% |
+
+- **Khởi động chậm.** 7.3 giây đầu Spark chưa ghi lượt nào: đợt đầu tiên có dữ liệu chậm hơn hẳn các đợt sau
+  (nhiều khả năng do khởi động tiến trình Python và biên dịch kế hoạch lần đầu). Mọi lượt vượt 5,000 ms đều nằm
+  trong 10 giây này, nên P95/P99 của cả lần đo cao hơn hẳn lúc ổn định.
+- **Ổn định ở khoảng 2.4 giây.** Spark ghi theo đợt, trung bình 1.75 giây một đợt (67 đợt cho 3000 lượt), dài hơn
+  chu kỳ 1 giây nên đợt sau bắt đầu ngay khi đợt trước xong. Độ trễ của một lượt gồm thời gian chờ đợt kế tiếp
+  và thời gian xử lý một đợt, nên nằm trong khoảng 1.1–4.7 giây. Spark theo kịp tốc độ gửi (24.5 lượt/giây so với
+  25), Kafka không còn tồn bản tin.
+- **Ảnh hưởng tới API.** API đợi tối đa `SCAN_WAIT_MS` = 3,000 ms rồi trả 202, thiết bị hỏi lại bằng
+  `GET /api/scan/:id` (file 15). Ở mức 25 lượt/giây có 28.4% lượt nhận 202 (18.0% khi đã ổn định). Nếu nâng
+  `SCAN_WAIT_MS` lên 4,000 ms thì khi ổn định chỉ còn 2.1% lượt nhận 202. Trước buổi demo nên gửi vài lượt
+  "làm nóng" để tránh 10 giây đầu.
+- **RAM.** Cả máy Codespaces (gồm cả VS Code) dùng 5.4–5.7 GB, trong đó Spark JVM gần 1.9 GB, SQL Server 1 GB,
+  Kafka 0.7 GB. Vì vậy máy 8 GB RAM là mức tối thiểu; máy 5.9 GB RAM của người viết code không chạy nổi.
+
 ## Chạy lại
 
 ```bash
