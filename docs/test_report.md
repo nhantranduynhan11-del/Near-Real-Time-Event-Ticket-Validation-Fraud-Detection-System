@@ -1,17 +1,8 @@
 # Báo cáo kiểm thử TC01–TC08
 
-Báo cáo kiểm thử bốn quy tắc gian lận R1–R4 (`Requirements/09_Fraud_Rules.md`) theo tám ca ở
+Báo cáo kiểm thử bốn quy tắc gian lận R1–R4 (`Requirements/09_Fraud_Rules.md`) theo 8 ca ở
 `Requirements/10_Test_Cases.md`.
 
-| | |
-|---|---|
-| Ngày chạy | 26/11/2026 |
-| Người chạy | Role A |
-| Chế độ hệ thống | `./scripts/up.sh full` (SQL Server + Kafka + Spark + API) |
-| Cách chạy | `./scripts/run_test_cases.sh` (mặc định `RESET_MODE=sql`: mỗi ca reset SQL Server, Spark vẫn chạy) |
-| Sự kiện | `EV001` (`ACTIVE_EVENT_ID=EV001`) |
-| Khung giờ nhận khách | Script tự đổi tạm sang [1 giờ trước, 2 giờ tới] khi chạy và trả lại như cũ sau đó |
-| Log thô | `docs/test_run_output.txt` |
 
 ## 1. Kết quả tổng hợp
 
