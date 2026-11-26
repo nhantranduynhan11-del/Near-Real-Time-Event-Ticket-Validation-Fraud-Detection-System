@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Sao lưu toàn bộ database vào database/backup/ (thư mục đã gắn ra ngoài container).
 # Dùng:  scripts/backup_db.sh [tên_tệp.bak]     mặc định: ticket_system_<ngày_giờ>.bak
-# Cần SQL Server đang chạy (./scripts/up.sh full hoặc docker compose --env-file docker/.env --profile full up -d sqlserver).
+# Cần SQL Server đang chạy (docker compose --profile app up -d sqlserver).
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -14,26 +14,33 @@ FILE=${1:-${DB_NAME}_$(date +%Y%m%d_%H%M%S).bak}
 
 [[ $FILE =~ ^[A-Za-z0-9._-]+\.bak$ ]] || { echo "Tên tệp chỉ gồm chữ, số, dấu . _ - và phải kết thúc bằng .bak" >&2; exit 1; }
 
+compose() {
+  local args=(-f "$COMPOSE_FILE")
+  [[ -f $ENV_FILE ]] && args+=(--env-file "$ENV_FILE")
+  COMPOSE_PROFILES=${COMPOSE_PROFILES:-full} docker compose "${args[@]}" "$@"
+}
+
+# shellcheck disable=SC2016
 sql_master() {
-  COMPOSE_PROFILES=full docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T sqlserver bash -c \
+  compose exec -T sqlserver bash -c \
     '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -I -b -d master'
 }
 
 mkdir -p "$BACKUP_DIR"
 if ! chmod 777 "$BACKUP_DIR" 2>/dev/null; then
-  echo "LỖI: Không thể chmod 777 cho $BACKUP_DIR (thường do Docker đã tạo thư mục bằng quyền root)." >&2
-  echo "Hãy chạy:  sudo chown \"\$USER\" \"$BACKUP_DIR\"  rồi chạy lại script." >&2
+  echo "Không đổi được quyền của $BACKUP_DIR (Docker thường tạo thư mục này bằng root)." >&2
+  echo "Chạy:  sudo chown \$USER $BACKUP_DIR   rồi chạy lại script." >&2
   exit 1
 fi
 
-start=$(( $(date +%s%N) / 1000000 ))
+start=$(date +%s%3N)
 sql_master <<SQL
 BACKUP DATABASE [$DB_NAME] TO DISK = N'$CONTAINER_DIR/$FILE' WITH FORMAT, INIT, COMPRESSION, CHECKSUM, STATS = 25;
 GO
 RESTORE VERIFYONLY FROM DISK = N'$CONTAINER_DIR/$FILE' WITH CHECKSUM;
 GO
 SQL
-end=$(( $(date +%s%N) / 1000000 ))
+end=$(date +%s%3N)
 
 ms=$((end - start))
 size=$(stat -c %s "$BACKUP_DIR/$FILE" 2>/dev/null || echo 0)
