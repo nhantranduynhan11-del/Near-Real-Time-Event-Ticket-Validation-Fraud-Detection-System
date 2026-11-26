@@ -33,6 +33,9 @@ services:
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      DB_PASSWORD_API: ${DB_PASSWORD_API:-}
+      SPARK_DB_PASSWORD: ${SPARK_DB_PASSWORD:-}
+      DB_PASSWORD_SPARK: ${DB_PASSWORD_SPARK:-}
     volumes:
       - ../database:/scripts:ro
     restart: "no"
@@ -103,6 +106,8 @@ services:
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      DB_USER_API: ${DB_USER_API:-}
+      DB_PASSWORD_API: ${DB_PASSWORD_API:-}
       DB_ENCRYPT: ${DB_ENCRYPT}
       KAFKA_INTERNAL: ${KAFKA_INTERNAL}
       KAFKA_TOPIC: ${KAFKA_TOPIC}

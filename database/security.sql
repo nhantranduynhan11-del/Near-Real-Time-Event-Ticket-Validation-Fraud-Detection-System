@@ -1,9 +1,9 @@
 USE master;
 GO
 IF NOT EXISTS (SELECT * FROM sys.server_principals WHERE name = 'api_user')
-    CREATE LOGIN api_user WITH PASSWORD = 'ApiPass@123', CHECK_POLICY = OFF;
+    CREATE LOGIN api_user WITH PASSWORD = '$(ApiPass)', CHECK_POLICY = OFF;
 IF NOT EXISTS (SELECT * FROM sys.server_principals WHERE name = 'spark_user')
-    CREATE LOGIN spark_user WITH PASSWORD = 'SparkPass@123', CHECK_POLICY = OFF;
+    CREATE LOGIN spark_user WITH PASSWORD = '$(SparkPass)', CHECK_POLICY = OFF;
 GO
 
 USE ticket_system;
@@ -39,4 +39,6 @@ GRANT SELECT ON dbo.event_gate TO spark_user;
 GRANT SELECT ON dbo.gate TO spark_user;
 GRANT SELECT ON dbo.scanner TO spark_user;
 GRANT SELECT ON dbo.gate_travel_time TO spark_user;
+GRANT SELECT ON dbo.app_user TO spark_user;
+GRANT EXECUTE ON dbo.usp_refresh_gold TO spark_user;
 GO

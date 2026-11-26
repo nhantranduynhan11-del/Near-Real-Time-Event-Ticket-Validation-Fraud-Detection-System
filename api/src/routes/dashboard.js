@@ -103,7 +103,7 @@ router.get('/live', authenticate, requireRole('EVENT_SUPERVISOR'), async (req, r
       const isUsed = a.scan_result === 'USED';
       const isWrongGate = a.scan_result === 'WRONG_GATE';
       return {
-        scan_event_id: a.scan_event_id,
+        scan_event_id: String(a.scan_event_id).toLowerCase(),
         created_at: dbToVietnamISO(a.created_at),
         received_at: dbToVietnamISO(a.received_at),
         alert_level: a.alert_level,

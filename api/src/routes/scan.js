@@ -61,7 +61,7 @@ function completedBody(row) {
     alert_code: row.alert_code,
     // Chỉ trả cổng đúng khi WRONG_GATE, để nhân viên chỉ khách sang cổng.
     ticket_assigned_gate_id: row.scan_result === 'WRONG_GATE' ? row.ticket_assigned_gate_id : null,
-    // --- THÊM 2 DÒNG NÀY CHO C1 ---
+
     previous_scan_gate_id: row.scan_result === 'USED' ? row.previous_scan_gate_id : null,
     time_since_previous_scan_ms: row.scan_result === 'USED' ? row.time_since_previous_scan_ms : null,
   };
