@@ -275,7 +275,7 @@ WHERE s.ticket_id LIKE @prefix + N'%' OR s.raw_qr_payload LIKE N'LOAD:%'
 UNION ALL
 SELECT N'scan_event ngoai khung gio (phai la 0)', COUNT(*) FROM dbo.scan_event
 WHERE (ticket_id LIKE @prefix + N'%' OR raw_qr_payload LIKE N'LOAD:%')
-  AND (received_at < @start OR received_at >= @end);
+  AND (received_at < @start OR received_at > @end);
 
 SELECT scan_result, COUNT(*) AS so_dong
 FROM dbo.scan_event
