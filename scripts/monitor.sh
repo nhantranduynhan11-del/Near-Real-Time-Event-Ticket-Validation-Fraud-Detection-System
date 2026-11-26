@@ -66,7 +66,9 @@ report() {
          CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st
          CROSS APPLY sys.dm_exec_plan_attributes(qs.plan_handle) AS pa
          WHERE pa.attribute = N'dbid' AND CAST(pa.value AS INT) = DB_ID()
-           AND st.text NOT LIKE N'%dm_exec_query_stats%'
+           -- Bỏ câu đọc catalog hệ thống (sys.*): truy vấn thống kê định kỳ của chính SQL Server và
+           -- của monitor.sh. Câu của API, Spark, Gold không đụng sys.*.
+           AND st.text NOT LIKE N'%sys.%'
          ORDER BY qs.total_elapsed_time / qs.execution_count DESC;"
   } | table
 
@@ -123,11 +125,13 @@ report() {
     echo "Kafka $TOPIC: $end_total bản tin; chưa có checkpoint Silver ($CHECKPOINT_OFFSETS)"
   fi
 
-  echo "Gold so với Silver: $(sql "SELECT CONCAT('Silver ghi lần cuối ', ISNULL(CONVERT(VARCHAR(23), MAX(processing_ts), 121), '-'),
-      ', Gold tính lại lần cuối ', ISNULL(CONVERT(VARCHAR(23), (SELECT MAX(updated_at) FROM dbo.gold_event_stats), 121), '-'),
-      CASE WHEN MAX(processing_ts) IS NULL THEN ''
-           WHEN (SELECT MAX(updated_at) FROM dbo.gold_event_stats) >= MAX(processing_ts) THEN ' (Gold đã theo kịp)'
-           ELSE ' (Gold CHƯA theo kịp Silver)' END)
+  # Chuỗi có dấu phải là N'...': chuỗi thường đi qua code page 1258 của collation Vietnamese_CI_AS,
+  # chữ như "ầ", "ố", "ạ" không có sẵn ở dạng dựng sẵn nên thành "?".
+  echo "Gold so với Silver: $(sql "SELECT CONCAT(N'Silver ghi lần cuối ', ISNULL(CONVERT(VARCHAR(23), MAX(processing_ts), 121), '-'),
+      N', Gold tính lại lần cuối ', ISNULL(CONVERT(VARCHAR(23), (SELECT MAX(updated_at) FROM dbo.gold_event_stats), 121), '-'),
+      CASE WHEN MAX(processing_ts) IS NULL THEN N''
+           WHEN (SELECT MAX(updated_at) FROM dbo.gold_event_stats) >= MAX(processing_ts) THEN N' (Gold đã theo kịp)'
+           ELSE N' (Gold CHƯA theo kịp Silver)' END)
     FROM dbo.scan_event;")"
 
   section "4. Bản tin trong DLQ ($DLQ_TOPIC)"

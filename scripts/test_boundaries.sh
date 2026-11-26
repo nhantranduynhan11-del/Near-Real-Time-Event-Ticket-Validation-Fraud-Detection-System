@@ -88,7 +88,7 @@ for i in "${!specs[@]}"; do
   expect "${LABELS[$i]}" "${line:-<không có dòng>}" "${wants[$i]}"
 done
 expect "(1) khoảng cách ghi trong scan_event: 139999 và 140000" \
-  "$(sql "SELECT CONCAT((SELECT time_since_previous_scan_ms FROM dbo.scan_event WHERE scan_event_id = '${IDS[2]}'), ' và ',
+  "$(sql "SELECT CONCAT((SELECT time_since_previous_scan_ms FROM dbo.scan_event WHERE scan_event_id = '${IDS[2]}'), N' và ',
                         (SELECT time_since_previous_scan_ms FROM dbo.scan_event WHERE scan_event_id = '${IDS[4]}'));")" \
   "139999 và 140000"
 expect "(3) số cổng sai khác nhau 1, 2, 3" \
