@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Demo quy trình sao lưu -> giả lập sự cố (xóa dữ liệu hoặc xóa DB) -> khôi phục -> đối chiếu số dòng.
+# Kịch bản chứng minh sao lưu và khôi phục:
+#   đếm dòng -> sao lưu -> xóa dữ liệu (giả lập sự cố) -> khôi phục -> đếm lại -> so khớp.
 # Dùng:  scripts/demo_backup_restore.sh [--yes]
-#        DISASTER=drop scripts/demo_backup_restore.sh --yes
+#        DISASTER=drop scripts/demo_backup_restore.sh   (xóa hẳn database thay vì chỉ xóa dữ liệu)
+# Ghi log vào docs/backup_restore_log.txt. Script XÓA SẠCH dữ liệu, nhưng luôn sao lưu trước.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -15,11 +17,19 @@ TABLES=(event gate event_gate gate_travel_time scanner app_user ticket scan_even
 mkdir -p "$(dirname "$LOG")"
 log() { printf '%s\n' "$*" | tee -a "$LOG"; }
 
+compose() {
+  local args=(-f "$COMPOSE_FILE")
+  [[ -f $ENV_FILE ]] && args+=(--env-file "$ENV_FILE")
+  COMPOSE_PROFILES=${COMPOSE_PROFILES:-full} docker compose "${args[@]}" "$@"
+}
+
+# shellcheck disable=SC2016
 sql_in() { # sql_in DB  (SQL đọc từ stdin)
-  COMPOSE_PROFILES=full docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T sqlserver bash -c \
+  compose exec -T sqlserver bash -c \
     '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -I -b -d "$0"' "$1"
 }
 
+# shellcheck disable=SC2016
 count_rows() { # in "bảng|số_dòng", đã sắp xếp
   local t sql="SET NOCOUNT ON;"$'\n' first=1
   for t in "${TABLES[@]}"; do
@@ -27,12 +37,12 @@ count_rows() { # in "bảng|số_dòng", đã sắp xếp
     sql+="SELECT N'$t|' + CAST(COUNT(*) AS NVARCHAR(20)) FROM dbo.[$t]"$'\n'
     first=0
   done
-  COMPOSE_PROFILES=full docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T sqlserver bash -c \
+  compose exec -T sqlserver bash -c \
     '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -I -b -d "$0" -h -1 -W' "$DB_NAME" \
     <<<"$sql" | grep '|' | sort
 }
 
-ms_since() { echo $(( $(( $(date +%s%N) / 1000000 )) - $1 )); }
+ms_since() { echo $(( $(date +%s%3N) - $1 )); }
 fmt_ms() { printf '%d.%03d giây' $(($1 / 1000)) $(($1 % 1000)); }
 
 if [[ ${1:-} != --yes ]]; then
@@ -55,7 +65,7 @@ tr '|' ' ' < "$TMP/before.txt" | awk '{printf "  %-20s %10s\n", $1, $2; total +=
 
 log ""
 log "Bước 2. Sao lưu"
-t0=$(( $(date +%s%N) / 1000000 ))
+t0=$(date +%s%3N)
 bash "$ROOT/scripts/backup_db.sh" "$BACKUP" | tee -a "$LOG"
 backup_ms=$(ms_since "$t0")
 
@@ -95,7 +105,7 @@ fi
 
 log ""
 log "Bước 4. Khôi phục"
-t0=$(( $(date +%s%N) / 1000000 ))
+t0=$(date +%s%3N)
 bash "$ROOT/scripts/restore_db.sh" "$BACKUP" | tee -a "$LOG"
 restore_ms=$(ms_since "$t0")
 
