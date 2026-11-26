@@ -1,25 +1,48 @@
 # Theo dõi hệ thống (scripts/monitor.sh)
 
-> **Chưa có ví dụ chạy thật.** Chạy `./scripts/monitor.sh --save` khi hệ thống đang chạy để ghi đè tệp này
-> bằng kết quả thật.
+Ví dụ kết quả chạy `./scripts/monitor.sh --save` lúc 2026-11-26 22:54 (giờ Việt Nam).
+Ý nghĩa từng phần: xem đầu tệp `scripts/monitor.sh` và mục 7.2 của README.
 
-Một lệnh, chỉ đọc, in ra bốn phần:
+```text
+Theo dõi hệ thống — 2026-11-26 22:54:40 (giờ Việt Nam), ACTIVE_EVENT_ID=EV001
 
-| Phần | Nội dung | Lấy từ |
-|---|---|---|
-| 1. Truy vấn chậm nhất | 10 câu lệnh trên `ticket_system` có thời gian trung bình mỗi lần lớn nhất: số lần chạy, trung bình và lớn nhất (ms), số trang đọc trung bình | `sys.dm_exec_query_stats`, tính từ lúc SQL Server bật |
-| 2. Kích thước bảng | Số dòng, tổng dung lượng, phần dữ liệu, phần index phụ, số index phụ của từng bảng | `sys.dm_db_partition_stats` |
-| 3. Pipeline | Độ trễ `ingestion_lag_ms` của N lượt quét gần nhất (TB, P50, P95, lớn nhất); số lượt ghi trong 5 phút qua; Spark còn chạy không; Spark còn tồn bao nhiêu bản tin trong Kafka; Gold có theo kịp Silver không | `scan_event`, `gold_event_stats`, checkpoint Silver, `kafka-get-offsets.sh` |
-| 4. DLQ | Số bản tin đang giữ trong `scan-events-dlq`, chia theo lý do: Bronze (JSON hỏng, thiếu trường) hoặc mã `dlq_reason` do Silver gắn | `kafka-get-offsets.sh`, `kafka-console-consumer.sh` |
+== 1. Truy vấn chạy chậm nhất (trung bình mỗi lần, tính từ lúc SQL Server bật) ==
+số_lần  tb_ms  lớn_nhất_ms  tb_logical_reads  câu_lệnh
+1       551.3  551.3        181657            SELECT       db_id() as database_id,       sm.[is_inlineable] AS InlineableScalarCount,   
+2       56.0   63.5         4                 SELECT (     SELECT LOWER(CONVERT(NVARCHAR(36), s.scan_event_id)) AS id     FROM dbo.scan_
+1       9.0    9.0          169               SELECT CONCAT(DATEDIFF_BIG(MILLISECOND, CAST('1970-01-01T00:00:00' AS DATETIME2(3)), recei
+3       7.9    8.2          58                INSERT INTO dbo.gold_event_stats         (event_id, bucket_start, total_scans, cnt_valid, 
+60      7.5    448.6        2                 SELECT            ISNULL(SUM(total_scans), 0) as total_scans,           ISNULL(SUM(fraud_c
+1       7.2    7.2          161               SELECT CONCAT(DATEDIFF_BIG(MILLISECOND, CAST('1970-01-01T00:00:00' AS DATETIME2(3)), recei
+2       6.6    7.1          645               INSERT INTO dbo.gold_alert         (scan_event_id, event_id, created_at, received_at, aler
+3       6.1    6.4          75                INSERT INTO dbo.gold_gate_stats         (event_id, gate_id, total_scans, cnt_valid, cnt_in
+1       6.1    6.1          168               SELECT CONCAT(DATEDIFF_BIG(MILLISECOND, CAST('1970-01-01T00:00:00' AS DATETIME2(3)), recei
+211     3.1    12.2         504               INSERT INTO dbo.scan_event (scan_event_id, event_id, ticket_id, scanner_id, gate_id, opera
 
-```bash
-./scripts/monitor.sh              # in ra màn hình
-./scripts/monitor.sh -n 500       # độ trễ tính trên 500 lượt gần nhất (mặc định 100)
-./scripts/monitor.sh --save       # in ra và ghi lại vào tệp này
-./scripts/monitor.sh --no-dlq-detail   # bỏ bước đọc header DLQ (nhanh hơn vài giây)
+== 2. Kích thước và số dòng từng bảng ==
+bảng              số_dòng  tổng_MB  dữ_liệu_MB  index_phụ_MB  số_index_phụ
+scan_event        3000     2.28     1.26        0.81          3
+gold_alert        2995     1.08     0.80        0.16          1
+fraud_alert       2995     0.38     0.34        0.00          0
+app_user          5        0.14     0.02        0.02          1
+scanner           4        0.14     0.02        0.02          1
+ticket            7        0.14     0.02        0.02          1
+event             2        0.07     0.02        0.00          0
+event_gate        6        0.07     0.02        0.00          0
+gate              4        0.07     0.02        0.00          0
+gate_travel_time  12       0.07     0.02        0.00          0
+gold_event_stats  3        0.07     0.02        0.00          0
+gold_gate_stats   4        0.07     0.02        0.00          0
+
+== 3. Pipeline: độ trễ 100 lượt quét gần nhất (ingestion_lag_ms = processing_ts - received_at) ==
+số_lượt  tb_ms   P50_ms  P95_ms  lớn_nhất_ms  lượt_mới_nhất
+100      2824.0  2815    3734    3888         2026-11-26 22:54:30.543
+
+Lượt quét Spark ghi trong 5 phút qua: 3000
+Spark: đang chạy (pid 220413), 02:59 từ lúc bật
+Kafka scan-events: 3000 bản tin; Spark đã nhận tới 3000 (đợt 64); còn tồn: 0
+Gold so với Silver: Silver ghi lần cuối 2026-11-26 22:54:33.671, Gold tính lại lần cuối 2026-11-26 22:54:33.683 (Gold đã theo kịp)
+
+== 4. Bản tin trong DLQ (scan-events-dlq) ==
+Đang giữ: 0 bản tin (tổng từng nhận: 0)
 ```
-
-Đọc kết quả: P95 độ trễ vượt khoảng 3 000 ms thì API bắt đầu trả 202 (`SCAN_WAIT_MS`); "còn tồn" tăng dần
-nghĩa là Spark xử lý không kịp tốc độ quét; "Gold CHƯA theo kịp Silver" kéo dài nghĩa là `refresh_gold` đang
-lỗi (xem `logs/spark.log`, dòng `[gold]`); DLQ có mã `UNKNOWN_SCANNER_GATE` hay `UNKNOWN_OPERATOR` nghĩa là
-có bản tin bỏ qua kiểm tra của API.
