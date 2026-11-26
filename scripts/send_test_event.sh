@@ -50,7 +50,9 @@ command -v docker >/dev/null 2>&1 || die "Không tìm thấy lệnh 'docker'."
 
 # Mã bản tin và giờ nhận theo giờ Việt Nam, kèm +07:00 (file 15, mục 2.1: không dùng giờ UTC).
 EVENT_ID="$(cat /proc/sys/kernel/random/uuid)"
-NOW_VN="$(TZ=Asia/Ho_Chi_Minh date +%Y-%m-%dT%H:%M:%S.%3N%:z)"
+# Lấy %N rồi cắt còn 3 chữ số thay cho %3N: có bản date (uutils trên Ubuntu mới) bỏ qua độ rộng của
+# %3N và in đủ 9 chữ số, cùng lỗi A gặp ở run_test_cases.sh (docs/test_report.md mục 3).
+NOW_VN="$(TZ=Asia/Ho_Chi_Minh date +%Y-%m-%dT%H:%M:%S.%N%:z | sed -E 's/\.([0-9]{3})[0-9]*/.\1/')"
 if [[ -n "$AT" ]]; then
   # Giờ đặt tay phải là ISO 8601 có múi giờ (+07:00 hoặc Z), như API sẽ gửi.
   ISO_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,3})?(Z|[+-][0-9]{2}:[0-9]{2})$'

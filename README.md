@@ -185,6 +185,18 @@ Một lệnh in ra: truy vấn chạy chậm nhất, kích thước và số dò
 ./scripts/monitor.sh --save       # in ra và ghi làm ví dụ vào docs/monitoring.md
 ```
 
+### 7.2a Chạy một lần mọi bước kiểm của B trên hệ thống thật
+
+Cần máy từ 8 GB RAM, khoảng 15 phút. Script **xóa dữ liệu quét** (như `reset.sh -y`) và không commit gì:
+
+```bash
+./scripts/run_b_checks.sh            # tải 25 lượt/giây x 120 giây
+./scripts/run_b_checks.sh --quick    # tải nhẹ 10 lượt/giây x 30 giây, để chạy thử trước
+./scripts/run_b_checks.sh --skip-tc  # bỏ TC01-TC08
+```
+
+Thứ tự: bật `full` và reset, dời khung giờ, đo tải (B2), `monitor.sh --save` (B3), TC01–TC08 qua API (B4: điền `SPARK_DB_USER`/`SPARK_DB_PASSWORD` trước thì Spark chạy bằng `spark_user`), `test_boundaries.sh` (B1), cuối cùng reset, bật lại Spark và trả giờ demo. Log từng bước ở `logs/b_checks_<giờ>/`; cuối script in các tệp `docs/` đã đổi để xem lại rồi commit.
+
 ### 7.2b Tài khoản database riêng cho API và Spark (C3/B4)
 
 Hệ thống áp dụng nguyên tắc **Least Privilege (quyền tối thiểu)**.

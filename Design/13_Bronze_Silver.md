@@ -200,6 +200,8 @@ Spark đọc `SPARK_DB_USER`/`SPARK_DB_PASSWORD` trong `docker/.env`; để tr�
 
 Thiếu quyền Silver thì Spark in câu `GRANT` còn thiếu rồi dừng; thiếu riêng `EXECUTE` thì cảnh báo và Gold đứng yên.
 
+`database/security_spark.sql` (C3) cấp đúng bảng quyền trên và thu hồi các quyền thừa của bản cũ (UPDATE/DELETE trên `scan_event`, quyền trực tiếp trên bảng Gold, SELECT trên `gate`). Đã chạy thật trên máy của C ngày 26/11: Spark đăng nhập bằng `spark_user`, 31/31 quyền đạt, Silver và Gold đều ghi được (`docs/test_report.md` mục 4.3). TC01–TC08 chạy với Spark bằng `spark_user` nằm trong `./scripts/run_b_checks.sh`.
+
 ### D.7 Chạy và kiểm thử
 
 ```bash
@@ -211,6 +213,7 @@ Thiếu quyền Silver thì Spark in câu `GRANT` còn thiếu rồi dừng; thi
 ./scripts/measure_ingestion_lag.sh                  # đo ingestion_lag_ms của 100 lượt -> docs/
 python3 scripts/load_test.py                        # B2: đo tải một mức -> docs/performance.md
 ./scripts/monitor.sh                                # B3: theo dõi DB, pipeline, DLQ
+./scripts/run_b_checks.sh                           # B1-B4 trên hệ thống thật, một lệnh (máy từ 8 GB RAM)
 ```
 
 Thử trước ngày demo: CHECK `processing_ts >= received_at` không cho ghi lượt quét có giờ nhận ở tương lai. Vì vậy `./scripts/dev_event_window.sh now` dời khung giờ của `ACTIVE_EVENT_ID` về quanh hiện tại, còn `scripts/send_scans.py VÉ@CỔNG@-GIÂY` gửi giờ nhận tính lùi từ bây giờ. Xong việc thì `./scripts/dev_event_window.sh demo` để trả lại giờ demo.
