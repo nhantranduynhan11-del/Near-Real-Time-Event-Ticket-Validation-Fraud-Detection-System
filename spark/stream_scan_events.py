@@ -63,7 +63,7 @@ def db_settings():
     """Kết nối SQL Server từ WSL (ngoài Docker): DB_HOST_EXTERNAL.
 
     Tài khoản: SPARK_DB_USER/SPARK_DB_PASSWORD (tài khoản riêng của Spark, B4, tạo bằng
-    database/security.sql). Để trống CẢ HAI thì dùng DB_USER/DB_PASSWORD (sa). Chỉ điền một trong
+    database/security_spark.sql). Để trống CẢ HAI thì dùng DB_USER/DB_PASSWORD (sa). Chỉ điền một trong
     hai là lỗi cấu hình: không ghép tên tài khoản Spark với mật khẩu sa.
     """
     spark_user = get_config("SPARK_DB_USER", "")

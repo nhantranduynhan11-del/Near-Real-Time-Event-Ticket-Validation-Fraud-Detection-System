@@ -33,9 +33,10 @@ services:
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      DB_USER_API: ${DB_USER_API:-}
       DB_PASSWORD_API: ${DB_PASSWORD_API:-}
+      SPARK_DB_USER: ${SPARK_DB_USER:-}
       SPARK_DB_PASSWORD: ${SPARK_DB_PASSWORD:-}
-      DB_PASSWORD_SPARK: ${DB_PASSWORD_SPARK:-}
     volumes:
       - ../database:/scripts:ro
     restart: "no"
