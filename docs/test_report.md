@@ -134,16 +134,4 @@ lại TC08 chỉ mất 12,7 giây. Con số in ra bị nhân 1.000.000 (4188 ms 
 **Ranh giới đúng 140 giây.** Để phân biệt `<` với `<=` cần `./scripts/test_boundaries.sh` (gửi thẳng vào Kafka với
 thời gian chính xác; script xóa dữ liệu quét và tắt Spark nên chạy sau cùng).
 
-Kết quả `test_boundaries.sh`: _(điền sau khi chạy)_
 
-## 4. Cách chạy lại
-
-```bash
-docker compose -f docker/docker-compose.yml --env-file docker/.env --profile full down -v   # nếu DB dựng trước 18/11
-./scripts/up.sh full
-./scripts/run_test_cases.sh 2>&1 | tee docs/test_run_output.txt
-./scripts/run_test_cases.sh TC08                  # chạy riêng một ca
-./scripts/test_boundaries.sh                      # ca ranh giới (cần ./scripts/up.sh stream)
-```
-
-Yêu cầu: `curl`, `jq`, GNU `date`; `docker/.env` đã điền `DB_PASSWORD`, `JWT_SECRET`, `QR_HMAC_SECRET`.
