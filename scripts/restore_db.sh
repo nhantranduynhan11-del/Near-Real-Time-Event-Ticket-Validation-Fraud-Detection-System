@@ -6,6 +6,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 COMPOSE_FILE=${COMPOSE_FILE:-$ROOT/docker/docker-compose.yml}
+ENV_FILE=${ENV_FILE:-$ROOT/docker/.env}
 BACKUP_DIR=${BACKUP_DIR:-$ROOT/database/backup}
 CONTAINER_DIR=/var/opt/mssql/backup
 DB_NAME=${DB_NAME:-ticket_system}
@@ -21,7 +22,7 @@ fi
 chmod a+r "$BACKUP_DIR/$FILE" 2>/dev/null || true
 
 sql_master() {
-  docker compose -f "$COMPOSE_FILE" exec -T sqlserver bash -c \
+  COMPOSE_PROFILES=full docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T sqlserver bash -c \
     '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -I -b -d master'
 }
 
