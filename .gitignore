@@ -27,3 +27,5 @@ Thumbs.db
 *.pid
 .vscode/
 .idea/
+# ===== Database backup (không commit tệp .bak) =====
+database/backup/
