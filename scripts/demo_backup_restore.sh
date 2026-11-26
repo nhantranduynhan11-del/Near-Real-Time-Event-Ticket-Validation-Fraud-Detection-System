@@ -1,8 +1,12 @@
-
+#!/usr/bin/env bash
+# Demo quy trình sao lưu -> giả lập sự cố (xóa dữ liệu hoặc xóa DB) -> khôi phục -> đối chiếu số dòng.
+# Dùng:  scripts/demo_backup_restore.sh [--yes]
+#        DISASTER=drop scripts/demo_backup_restore.sh --yes
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 COMPOSE_FILE=${COMPOSE_FILE:-$ROOT/docker/docker-compose.yml}
+ENV_FILE=${ENV_FILE:-$ROOT/docker/.env}
 DB_NAME=${DB_NAME:-ticket_system}
 DISASTER=${DISASTER:-delete}
 LOG=${LOG:-$ROOT/docs/backup_restore_log.txt}
@@ -12,7 +16,7 @@ mkdir -p "$(dirname "$LOG")"
 log() { printf '%s\n' "$*" | tee -a "$LOG"; }
 
 sql_in() { # sql_in DB  (SQL đọc từ stdin)
-  docker compose -f "$COMPOSE_FILE" exec -T sqlserver bash -c \
+  COMPOSE_PROFILES=full docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T sqlserver bash -c \
     '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -I -b -d "$0"' "$1"
 }
 
@@ -23,7 +27,7 @@ count_rows() { # in "bảng|số_dòng", đã sắp xếp
     sql+="SELECT N'$t|' + CAST(COUNT(*) AS NVARCHAR(20)) FROM dbo.[$t]"$'\n'
     first=0
   done
-  docker compose -f "$COMPOSE_FILE" exec -T sqlserver bash -c \
+  COMPOSE_PROFILES=full docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T sqlserver bash -c \
     '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -I -b -d "$0" -h -1 -W' "$DB_NAME" \
     <<<"$sql" | grep '|' | sort
 }
