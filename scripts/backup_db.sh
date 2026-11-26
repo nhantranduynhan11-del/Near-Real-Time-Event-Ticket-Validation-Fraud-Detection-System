@@ -21,14 +21,14 @@ sql_master() {
 mkdir -p "$BACKUP_DIR"
 chmod 777 "$BACKUP_DIR"
 
-start=$(date +%s%3N)
+start=$(( $(date +%s%N) / 1000000 ))
 sql_master <<SQL
 BACKUP DATABASE [$DB_NAME] TO DISK = N'$CONTAINER_DIR/$FILE' WITH FORMAT, INIT, COMPRESSION, CHECKSUM, STATS = 25;
 GO
 RESTORE VERIFYONLY FROM DISK = N'$CONTAINER_DIR/$FILE' WITH CHECKSUM;
 GO
 SQL
-end=$(date +%s%3N)
+end=$(( $(date +%s%N) / 1000000 ))
 
 ms=$((end - start))
 size=$(stat -c %s "$BACKUP_DIR/$FILE" 2>/dev/null || echo 0)
