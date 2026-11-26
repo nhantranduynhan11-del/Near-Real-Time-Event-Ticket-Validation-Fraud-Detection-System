@@ -28,7 +28,7 @@ count_rows() { # in "bảng|số_dòng", đã sắp xếp
     <<<"$sql" | grep '|' | sort
 }
 
-ms_since() { echo $(( $(date +%s%3N) - $1 )); }
+ms_since() { echo $(( $(( $(date +%s%N) / 1000000 )) - $1 )); }
 fmt_ms() { printf '%d.%03d giây' $(($1 / 1000)) $(($1 % 1000)); }
 
 if [[ ${1:-} != --yes ]]; then
@@ -51,7 +51,7 @@ tr '|' ' ' < "$TMP/before.txt" | awk '{printf "  %-20s %10s\n", $1, $2; total +=
 
 log ""
 log "Bước 2. Sao lưu"
-t0=$(date +%s%3N)
+t0=$(( $(date +%s%N) / 1000000 ))
 bash "$ROOT/scripts/backup_db.sh" "$BACKUP" | tee -a "$LOG"
 backup_ms=$(ms_since "$t0")
 
@@ -91,7 +91,7 @@ fi
 
 log ""
 log "Bước 4. Khôi phục"
-t0=$(date +%s%3N)
+t0=$(( $(date +%s%N) / 1000000 ))
 bash "$ROOT/scripts/restore_db.sh" "$BACKUP" | tee -a "$LOG"
 restore_ms=$(ms_since "$t0")
 
