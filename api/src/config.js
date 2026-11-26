@@ -18,6 +18,23 @@ function parseExpiresIn(raw) {
   return raw;
 }
 
+// Tai khoan DB rieng cua API phai duoc cau hinh theo cap.
+function dbCredentials(env = process.env) {
+  const user = env.DB_USER_API || '';
+  const password = env.DB_PASSWORD_API || '';
+
+  if (Boolean(user) !== Boolean(password)) {
+    throw new Error(
+      'DB_USER_API and DB_PASSWORD_API must both be set or both be empty.'
+    );
+  }
+
+  return {
+    user: user || env.DB_USER || 'sa',
+    password: password || env.DB_PASSWORD || '',
+  };
+}
+
 const config = {
   apiPort: parseInt(process.env.API_PORT || '3000', 10),
 
@@ -25,8 +42,7 @@ const config = {
     server: process.env.DB_HOST_INTERNAL || 'sqlserver',
     port: parseInt(process.env.DB_PORT || '1433', 10),
     database: process.env.DB_NAME || 'ticket_system',
-    user: process.env.DB_USER_API || process.env.DB_USER || 'sa',
-    password: process.env.DB_PASSWORD_API || process.env.DB_PASSWORD || '',
+    ...dbCredentials(),
     options: {
       encrypt: (process.env.DB_ENCRYPT || 'false') === 'true',
       trustServerCertificate: true,

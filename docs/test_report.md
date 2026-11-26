@@ -134,4 +134,316 @@ lại TC08 chỉ mất 12,7 giây. Con số in ra bị nhân 1.000.000 (4188 ms 
 **Ranh giới đúng 140 giây.** Để phân biệt `<` với `<=` cần `./scripts/test_boundaries.sh` (gửi thẳng vào Kafka với
 thời gian chính xác; script xóa dữ liệu quét và tắt Spark nên chạy sau cùng).
 
+---
 
+## 4. Kiểm thử bổ sung Role C
+
+**Ngày kiểm thử:** 26/11/2026.
+
+**Môi trường:** Ubuntu WSL, Docker Compose, SQL Server,
+Kafka, Spark Streaming và Node.js REST API.
+
+Các kiểm thử dưới đây bổ sung cho TC01–TC08,
+không thay thế kết quả kiểm thử các quy tắc R1–R4.
+
+### 4.1. C1 — Thông tin lượt quét trước khi kết quả là USED
+
+**Mục tiêu:** Kiểm tra khả năng cung cấp thông tin
+lượt quét trước khi phát hiện vé đã được sử dụng.
+
+**Dữ liệu kiểm thử:**
+
+- Sự kiện: EV001.
+- Vé: TK006.
+- Cổng: GATE_A.
+- Máy quét: SC_A1.
+
+| Thuộc tính | Lượt đầu tiên | Lượt thứ hai |
+|---|---|---|
+| scan_result | VALID | USED |
+| Trạng thái vé trước | UNUSED | VALID_ENTRY |
+| Trạng thái vé sau | VALID_ENTRY | FLAGGED_FRAUD |
+| previous_scan_gate_id | NULL | GATE_A |
+| time_since_previous_scan_ms | NULL | 94155 |
+| alert_level | NONE | FRAUD |
+| alert_code | NULL | DUPLICATE_SCAN |
+
+Khoảng thời gian giữa hai lượt quét là 94,155 giây.
+
+Thông tin lượt quét trước được ghi nhận tại Silver,
+chuyển sang Gold và hiển thị trên Dashboard.
+
+API test cũng xác nhận hai trường này có giá trị
+đối với USED và bằng null đối với các kết quả khác.
+
+**Kết quả: Đạt.**
+
+### 4.2. C2 — Dashboard Live
+
+#### 4.2.1. Mục tiêu
+
+- Kiểm tra khả năng cập nhật dữ liệu Dashboard.
+- Đối chiếu dữ liệu Silver, Gold và giao diện.
+- Kiểm tra quyền truy cập EVENT_SUPERVISOR.
+- Kiểm tra nguồn dữ liệu thống kê của Dashboard.
+
+#### 4.2.2. Điều kiện kiểm thử
+
+- API health: OK.
+- SQL Server: OK.
+- Kafka: OK.
+- Spark Bronze và Silver đang hoạt động.
+- Sự kiện EV001 đang trong khung giờ nhận khách.
+- Dashboard được mở bằng tài khoản supervisor.
+- Vé TK002 thuộc EV001, được phân công GATE_B,
+  có trạng thái ban đầu UNUSED.
+
+#### 4.2.3. Thao tác kiểm thử
+
+Gửi một lượt quét hợp lệ trực tiếp vào Kafka:
+
+```bash
+python3 scripts/send_scans.py TK002@GATE_B@0
+```
+
+Theo dõi Spark:
+
+```bash
+tail -f logs/spark.log
+```
+
+Ca này kiểm tra luồng xử lý Kafka, Spark, Silver,
+Gold và Dashboard; không kiểm tra HMAC của REST API.
+
+#### 4.2.4. Kết quả xử lý Spark
+
+```text
+[gold] batch 32: đã tính lại Gold (0.02s)
+
+[silver] batch 32: 1 lượt -> Silver (VALID 1);
+1 vé đổi trạng thái; 0 đã có (bỏ qua);
+0 -> DLQ; 3.52s
+
+[batch 32] 1 bản tin hợp lệ -> Bronze,
+0 bản tin hỏng -> DLQ
+```
+
+Kết quả của TK002:
+
+| Thuộc tính | Giá trị |
+|---|---|
+| event_id | EV001 |
+| ticket_id | TK002 |
+| gate_id | GATE_B |
+| scanner_id | SC_B1 |
+| scan_result | VALID |
+| alert_level | NONE |
+| alert_code | NULL |
+| ticket_status | VALID_ENTRY |
+
+#### 4.2.5. So sánh Dashboard trước và sau kiểm thử
+
+| Chỉ số | Trước | Mong đợi | Thực tế | Kết quả |
+|---|---:|---:|---:|---|
+| Tổng lượt quét | 5 | 6 | 6 | Đạt |
+| VALID | 2 | 3 | 3 | Đạt |
+| USED | 2 | 2 | 2 | Đạt |
+| INVALID | 1 | 1 | 1 | Đạt |
+| FRAUD | 3 | 3 | 3 | Đạt |
+| WARNING | 0 | 0 | 0 | Đạt |
+| Tỷ lệ gian lận | 60% | 50% | 50% | Đạt |
+| Tổng lượt GATE_B | 0 | 1 | 1 | Đạt |
+| VALID tại GATE_B | 0 | 1 | 1 | Đạt |
+
+**Dashboard trước kiểm thử:**
+
+![Dashboard trước kiểm thử C2](images/c2_dashboard_before.png)
+
+**Dashboard sau kiểm thử:**
+
+![Dashboard sau kiểm thử C2](images/c2_dashboard_after.png)
+
+#### 4.2.6. Đối chiếu Silver, Gold và Dashboard
+
+| Chỉ số | Silver | Gold | Dashboard |
+|---|---:|---:|---:|
+| Tổng lượt quét | 6 | 6 | 6 |
+| VALID | 3 | 3 | 3 |
+| USED | 2 | 2 | 2 |
+| INVALID | 1 | 1 | 1 |
+| CANCELLED | 0 | 0 | 0 |
+| EXPIRED | 0 | 0 | 0 |
+| WRONG_GATE | 0 | 0 | 0 |
+| FRAUD | 3 | 3 | 3 |
+| WARNING | 0 | 0 | 0 |
+| Tỷ lệ gian lận | 50% | 50% | 50% |
+
+Thống kê theo cổng:
+
+| Cổng | Tổng lượt | Hợp lệ | Từ chối | FRAUD |
+|---|---:|---:|---:|---:|
+| GATE_A | 4 | 2 | 2 | 2 |
+| GATE_B | 1 | 1 | 0 | 0 |
+| GATE_C | 0 | 0 | 0 | 0 |
+| GATE_D | 1 | 0 | 1 | 1 |
+| Tổng | 6 | 3 | 3 | 3 |
+
+GATE_C chưa phát sinh lượt quét nên chưa có
+bản ghi tương ứng trong GOLD_GATE_STATS.
+API sử dụng LEFT JOIN và ISNULL để vẫn hiển thị
+cổng này với các chỉ số bằng 0.
+
+#### 4.2.7. Kiểm tra mã nguồn và phân quyền
+
+Endpoint:
+
+```text
+GET /api/dashboard/live
+```
+
+Middleware:
+
+```javascript
+authenticate,
+requireRole('EVENT_SUPERVISOR')
+```
+
+Nguồn dữ liệu:
+
+| Thành phần | Bảng dữ liệu |
+|---|---|
+| Thông tin sự kiện | EVENT |
+| Danh sách cổng | GATE, EVENT_GATE |
+| Thống kê tổng quan | GOLD_EVENT_STATS |
+| Thống kê theo cổng | GOLD_GATE_STATS |
+| Cảnh báo | GOLD_ALERT |
+
+API không truy vấn trực tiếp SCAN_EVENT hoặc
+FRAUD_ALERT để tính toán số liệu Dashboard.
+
+Frontend cấu hình:
+
+```javascript
+var POLL_INTERVAL_MS = 1000;
+```
+
+Cơ chế polling sử dụng setTimeout và gửi yêu cầu
+đến endpoint /api/dashboard/live.
+
+API trả header Cache-Control: no-store.
+
+| Kiểm thử quyền | Mong đợi | Thực tế |
+|---|---|---|
+| Không có JWT | HTTP 401 | HTTP 401 |
+| JWT của GATE_OPERATOR | HTTP 403 | HTTP 403 |
+| JWT của EVENT_SUPERVISOR | HTTP 200 | HTTP 200 |
+
+#### 4.2.8. Thời gian cập nhật Gold
+
+- scanned_at: 2026-11-26 20:26:30.253.
+- updated_at: 2026-11-26 20:26:37.017.
+- Khoảng thời gian: 6764 ms, tương đương 6,764 giây.
+- Thời gian xử lý Silver được ghi trong log: 3,52 giây.
+- Thời gian tính lại Gold: 0,02 giây.
+
+Spark ghi nhận cảnh báo batch vượt trigger interval
+1000 ms. Tuy nhiên, batch vẫn xử lý thành công,
+không phát sinh bản tin DLQ.
+
+Khoảng nghỉ polling 1 giây không đồng nghĩa
+độ trễ toàn bộ pipeline luôn dưới 1 giây.
+
+Giá trị 6,764 giây là khoảng thời gian từ scanned_at
+đến updated_at của Gold, không phải độ trễ end-to-end
+đến trình duyệt.
+
+#### 4.2.9. Kết luận C2
+
+- Đối chiếu dữ liệu Silver, Gold và Dashboard: Đạt.
+- Thống kê theo cổng: Đạt.
+- Phân quyền Dashboard: Đạt.
+- Nguồn dữ liệu thống kê Gold: Đạt.
+- Cấu hình polling 1000 ms: Đạt.
+- Xác nhận thao tác cập nhật không tải lại trang:
+  cần xác nhận của người trực tiếp thực hiện kiểm thử.
+
+### 4.3. C3 — Database Least Privilege
+
+API và Spark sử dụng hai tài khoản chuyên biệt:
+
+- api_user.
+- spark_user.
+
+| Kiểm thử | Kết quả |
+|---|---|
+| Kiểm tra quyền api_user | 32/32 đạt |
+| Kiểm tra quyền spark_user | 31/31 đạt |
+| Tổng số quyền được kiểm tra | 63/63 đạt |
+| Mô phỏng khởi tạo tài khoản độc lập | 8/8 đạt |
+| Đăng nhập bằng api_user | Thành công |
+| Đăng nhập bằng spark_user | Thành công |
+| Kiểm tra SQL Session thực tế | Đạt |
+| API INSERT trái phép vào scan_event | SQL Server error 229 |
+| Spark ghi Silver | Thành công |
+| Spark cập nhật Gold qua stored procedure | Thành công |
+
+Kiểm thử 8/8 sử dụng sqlcmd mô phỏng để kiểm tra
+luồng điều kiện của entrypoint.sh, không phải
+tám lần triển khai SQL Server mới.
+
+![Kiểm tra 63 quyền database](images/security_permissions_63_pass.png)
+
+![Tài khoản SQL đang sử dụng](images/security_runtime_accounts.png)
+
+![SQL Server từ chối INSERT trái phép](images/security_db_denied.png)
+
+**Kết quả: Đạt đối với các trường hợp đã kiểm thử.**
+
+### 4.4. C4 — Kiểm thử bảo mật
+
+| Cơ chế | Kiểm thử | Kết quả |
+|---|---|---|
+| HMAC-SHA256 | Sửa chữ ký QR | INVALID_QR |
+| JWT | Truy cập không có token | HTTP 401 |
+| RBAC | Operator truy cập Dashboard | HTTP 403 |
+| Bcrypt | Kiểm tra password_hash | Cost factor 10 |
+| Least Privilege | INSERT trái phép | Error 229 |
+| Secret management | Kiểm tra docker/.env | Không được Git theo dõi |
+
+QR giả được gửi qua REST API với mã vé TK005
+và chữ ký HMAC đã bị thay đổi.
+
+Kết quả:
+
+- scan_result = INVALID.
+- entry = DENY.
+- alert_level = FRAUD.
+- alert_code = INVALID_QR.
+- ticket_id trong Silver = NULL.
+- decode_error = 1.
+- Vé TK005 vẫn có trạng thái UNUSED.
+- Gold ghi nhận cảnh báo INVALID_QR.
+
+Chi tiết và ảnh minh chứng được trình bày tại
+[Security Documentation](security.md).
+
+**Kết quả: Đạt đối với các trường hợp đã kiểm thử.**
+
+### 4.5. Tổng hợp kiểm thử Role C
+
+| Hạng mục | Kết quả |
+|---|---|
+| Unit test và API test | 30/30 đạt |
+| Database permission test | 63/63 đạt |
+| Mô phỏng khởi tạo độc lập | 8/8 đạt |
+| Liên kết ảnh security.md | 9/9 hợp lệ |
+| Chỉ số Dashboard trước và sau | 9/9 khớp |
+| Đối chiếu Silver, Gold và Dashboard | 10/10 khớp |
+| Git diff check | Đạt |
+
+Các nhóm kiểm thử trên có phạm vi khác nhau,
+không cộng gộp thành một tỷ lệ kiểm thử duy nhất.
+
+Kết quả phản ánh môi trường phát triển và các
+tình huống đã thực hiện, không phải chứng nhận
+bảo mật hoặc hiệu năng production.

@@ -185,9 +185,100 @@ Một lệnh in ra: truy vấn chạy chậm nhất, kích thước và số dò
 ./scripts/monitor.sh --save       # in ra và ghi làm ví dụ vào docs/monitoring.md
 ```
 
-### 7.2b Spark dùng tài khoản database riêng (B4)
+### 7.2b Tài khoản database riêng cho API và Spark (C3/B4)
 
-Sau khi `database/security.sql` tạo tài khoản cho Spark, điền vào `docker/.env` **cả hai** biến `SPARK_DB_USER` và `SPARK_DB_PASSWORD` rồi bật lại Spark. Để trống cả hai thì Spark dùng `DB_USER` (`sa`). Lúc khởi động Spark tự kiểm quyền: thiếu quyền thì in sẵn câu `GRANT` cần chạy (bằng `sa`) rồi dừng; thiếu riêng quyền `EXECUTE` trên `dbo.usp_refresh_gold` thì chỉ cảnh báo vì Silver vẫn chạy, nhưng Gold sẽ đứng yên.
+Hệ thống áp dụng nguyên tắc **Least Privilege (quyền tối thiểu)**.
+
+| Tài khoản | Thành phần | Phạm vi quyền |
+|---|---|---|
+| `api_user` | Node.js API | Quản lý vé, cập nhật sự kiện, đọc Silver và Gold |
+| `spark_user` | Spark Streaming | Ghi Silver, cập nhật trạng thái vé, thực thi `dbo.usp_refresh_gold` |
+| `sa` | Quản trị database | Khởi tạo, phân quyền, sao lưu và khôi phục |
+
+API không được INSERT, UPDATE hoặc DELETE trên `scan_event`.
+Spark không được UPDATE hoặc DELETE trên `scan_event`, `fraud_alert`
+và không được ghi trực tiếp vào các bảng Gold.
+
+#### Cấu hình tài khoản
+
+Sinh hai mật khẩu riêng bằng lệnh `openssl rand -hex 32`.
+
+Mở file `docker/.env` bằng lệnh:
+
+```bash
+nano docker/.env
+```
+
+Điền các biến sau và thay mật khẩu mẫu bằng mật khẩu vừa sinh:
+
+```dotenv
+DB_USER_API=api_user
+DB_PASSWORD_API=<mat_khau_API>
+
+SPARK_DB_USER=spark_user
+SPARK_DB_PASSWORD=<mat_khau_Spark>
+```
+
+Không commit `docker/.env` hoặc mật khẩu thật lên GitHub.
+
+#### Cơ chế khởi tạo độc lập
+
+- `database/security_api.sql`: tạo và phân quyền cho API.
+- `database/security_spark.sql`: tạo và phân quyền cho Spark.
+- `database/security.sql`: gọi cả hai script bằng sqlcmd từ thư mục database.
+
+| Cấu hình API | Cấu hình Spark | Kết quả |
+|---|---|---|
+| Trống cả cặp | Trống cả cặp | Không tạo tài khoản riêng |
+| Điền đủ | Trống cả cặp | Chỉ khởi tạo api_user |
+| Trống cả cặp | Điền đủ | Chỉ khởi tạo spark_user |
+| Điền đủ | Điền đủ | Khởi tạo cả hai tài khoản |
+
+Nếu để trống cả username và password, thành phần tương ứng sử dụng
+`DB_USER` và `DB_PASSWORD`.
+
+Nếu chỉ điền một trong hai biến, hệ thống báo lỗi cấu hình.
+
+#### Khởi động hệ thống mới
+
+```bash
+./scripts/up.sh full
+```
+
+Với database đang có dữ liệu, áp dụng script phân quyền tương ứng
+bằng tài khoản quản trị, sau đó tạo lại container API và khởi động lại Spark.
+
+#### Thay đổi mật khẩu tài khoản đã tồn tại
+
+Các script sử dụng IF NOT EXISTS khi tạo login.
+Thay đổi mật khẩu trong docker/.env không tự động đổi mật khẩu SQL Server.
+
+Quản trị viên cần thực hiện ALTER LOGIN bằng tài khoản sa:
+
+```sql
+ALTER LOGIN api_user WITH PASSWORD = '<mat_khau_moi_API>';
+ALTER LOGIN spark_user WITH PASSWORD = '<mat_khau_moi_Spark>';
+```
+
+Sau đó đồng bộ docker/.env, tạo lại container API và khởi động lại Spark.
+
+Chỉ khi chấp nhận mất dữ liệu cũ mới dựng lại toàn bộ hệ thống:
+
+```bash
+docker compose -f docker/docker-compose.yml --env-file docker/.env --profile full down -v
+./scripts/up.sh full
+```
+
+**Cảnh báo:** down -v xóa các volume của dự án, bao gồm dữ liệu
+SQL Server và Kafka. Cần sao lưu trước nếu muốn giữ dữ liệu.
+
+#### Kiểm tra quyền Spark
+
+Spark kiểm tra quyền bằng HAS_PERMS_BY_NAME khi khởi động.
+Nếu thiếu quyền bắt buộc, Spark in câu GRANT cần thực hiện rồi dừng.
+
+Nếu chỉ thiếu quyền EXECUTE trên dbo.usp_refresh_gold,
+Spark cảnh báo vì Silver vẫn chạy nhưng Gold không được cập nhật.
 
 ### 7.3 Sinh dữ liệu lớn 300.000 dòng để đo Index (Role A)
 
