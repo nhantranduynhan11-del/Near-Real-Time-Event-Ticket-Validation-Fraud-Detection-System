@@ -21,13 +21,20 @@ fi
 [[ -f $BACKUP_DIR/$FILE ]] || { echo "Không thấy $BACKUP_DIR/$FILE" >&2; exit 1; }
 chmod a+r "$BACKUP_DIR/$FILE" 2>/dev/null || true
 
+compose() {
+  local args=(-f "$COMPOSE_FILE")
+  [[ -f $ENV_FILE ]] && args+=(--env-file "$ENV_FILE")
+  COMPOSE_PROFILES=${COMPOSE_PROFILES:-full} docker compose "${args[@]}" "$@"
+}
+
+# shellcheck disable=SC2016
 sql_master() {
-  COMPOSE_PROFILES=full docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T sqlserver bash -c \
+  compose exec -T sqlserver bash -c \
     '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -I -b -d master'
 }
 
 echo "Khôi phục từ $FILE ..."
-start=$(( $(date +%s%N) / 1000000 ))
+start=$(date +%s%3N)
 sql_master <<SQL
 RESTORE VERIFYONLY FROM DISK = N'$CONTAINER_DIR/$FILE' WITH CHECKSUM;
 GO
@@ -45,7 +52,7 @@ GO
 ALTER DATABASE [$DB_NAME] SET MULTI_USER;
 GO
 SQL
-end=$(( $(date +%s%N) / 1000000 ))
+end=$(date +%s%3N)
 
 ms=$((end - start))
 echo "Khôi phục xong."
