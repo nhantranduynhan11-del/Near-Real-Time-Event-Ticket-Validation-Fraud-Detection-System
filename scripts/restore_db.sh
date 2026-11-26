@@ -26,7 +26,7 @@ sql_master() {
 }
 
 echo "Khôi phục từ $FILE ..."
-start=$(date +%s%3N)
+start=$(( $(date +%s%N) / 1000000 ))
 sql_master <<SQL
 RESTORE VERIFYONLY FROM DISK = N'$CONTAINER_DIR/$FILE' WITH CHECKSUM;
 GO
@@ -44,7 +44,7 @@ GO
 ALTER DATABASE [$DB_NAME] SET MULTI_USER;
 GO
 SQL
-end=$(date +%s%3N)
+end=$(( $(date +%s%N) / 1000000 ))
 
 ms=$((end - start))
 echo "Khôi phục xong."
