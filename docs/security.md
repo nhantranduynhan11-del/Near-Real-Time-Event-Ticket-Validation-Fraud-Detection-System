@@ -152,7 +152,7 @@ database 'ticket_system', schema 'dbo'.
 PASS: Unauthorized INSERT denied
 ```
 
-![Kiểm chứng API không có quyền INSERT scan_event](images/security_db_denied.png)
+![Kiểm chứng API không có quyền INSERT scan_event](https://raw.githubusercontent.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System/main/docs/images/security_db_denied.png)
 
 ### 1.6. Quản lý mật khẩu tài khoản database
 
@@ -405,7 +405,7 @@ HTTP 401 thể hiện yêu cầu chưa được xác thực hợp lệ.
 HTTP 403 thể hiện người dùng đã được xác thực
 nhưng không có quyền thực hiện chức năng.
 
-![Kiểm chứng JWT và RBAC qua HTTP 401 và 403](images/security_jwt_401_403.png)
+![Kiểm chứng JWT và RBAC qua HTTP 401 và 403](https://raw.githubusercontent.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System/main/docs/images/security_jwt_401_403.png)
 
 ---
 
@@ -466,7 +466,7 @@ thực hành bảo mật được khuyến nghị cho môi trường production.
 Trong môi trường triển khai thực tế, mỗi người dùng
 cần có mật khẩu riêng và được băm độc lập.
 
-![Kiểm chứng password_hash của các tài khoản seed](images/security_bcrypt.png)
+![Kiểm chứng password_hash của các tài khoản seed](https://raw.githubusercontent.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System/main/docs/images/security_bcrypt.png)
 
 ---
 
@@ -507,7 +507,7 @@ Kết quả kiểm chứng:
 - Tệp cấu hình mẫu `docker/.env.example`
   được phép quản lý bằng Git.
 
-![Kiểm chứng tệp môi trường không được Git theo dõi](images/security_git_env.png)
+![Kiểm chứng tệp môi trường không được Git theo dõi](https://raw.githubusercontent.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System/main/docs/images/security_git_env.png)
 
 Không đưa mật khẩu database, JWT thực tế hoặc khóa HMAC
 vào tài liệu, ảnh minh chứng hay Git repository.
@@ -590,20 +590,20 @@ không phải tuyên bố rằng toàn bộ đã được hiện thực.
 
 ### 9.1. Kiểm thử QR giả qua REST API
 
-![9.1. Kiểm thử QR giả qua REST API](images/security_invalid_qr.png)
+![9.1. Kiểm thử QR giả qua REST API](https://raw.githubusercontent.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System/main/docs/images/security_invalid_qr.png)
 
 ### 9.2. Kiểm chứng QR giả trong Silver và Gold
 
-![9.2. Kiểm chứng QR giả trong Silver và Gold](images/security_invalid_qr_db.png)
+![9.2. Kiểm chứng QR giả trong Silver và Gold](https://raw.githubusercontent.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System/main/docs/images/security_invalid_qr_db.png)
 
 ### 9.3. API và Spark sử dụng tài khoản chuyên biệt
 
-![9.3. API và Spark sử dụng tài khoản chuyên biệt](images/security_runtime_accounts.png)
+![9.3. API và Spark sử dụng tài khoản chuyên biệt](https://raw.githubusercontent.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System/main/docs/images/security_runtime_accounts.png)
 
 ### 9.4. Kết quả kiểm tra 63 quyền database
 
-![9.4. Kết quả kiểm tra 63 quyền database](images/security_permissions_63_pass.png)
+![9.4. Kết quả kiểm tra 63 quyền database](https://raw.githubusercontent.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System/main/docs/images/security_permissions_63_pass.png)
 
 ### 9.5. Khởi tạo tài khoản database
 
-![9.5. Khởi tạo tài khoản database](images/security_db_init.png)
+![9.5. Khởi tạo tài khoản database](https://raw.githubusercontent.com/nhantranduynhan11-del/Near-Real-Time-Event-Ticket-Validation-Fraud-Detection-System/main/docs/images/security_db_init.png)
