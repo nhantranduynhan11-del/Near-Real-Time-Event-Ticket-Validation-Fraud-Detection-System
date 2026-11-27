@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Đăng nhập — Ticket Control</title>
+<title>Đăng nhập - Ticket Control</title>
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body class="login-page">
@@ -27,8 +27,6 @@
     <p class="form-error" id="form-error" role="alert" hidden></p>
 
     <button type="submit" class="btn btn-primary" id="submit" style="width:100%">Đăng nhập</button>
-
-    <div class="mock-badge" id="mock-badge" hidden>Đang dùng dữ liệu giả (API đăng nhập chưa sẵn sàng)</div>
   </form>
 
   <p class="hint">
@@ -41,7 +39,7 @@
 (function () {
   'use strict';
 
-  // Đã có phiên hợp lệ thì vào thẳng màn hình chính.
+  // Có sẵn phiên còn hạn thì vào thẳng trang chính
   if (TicketAuth.hasValidSession()) {
     location.replace('app.html');
     return;
@@ -51,12 +49,12 @@
   var userEl = document.getElementById('username');
   var passEl = document.getElementById('password');
   var errEl = document.getElementById('form-error');
-  var badge = document.getElementById('mock-badge');
   var submitBtn = document.getElementById('submit');
 
   var ERROR_TEXT = {
     INVALID_CREDENTIALS: 'Sai tên đăng nhập hoặc mật khẩu.',
-    VALIDATION_ERROR: 'Vui lòng nhập đủ tên đăng nhập và mật khẩu.'
+    VALIDATION_ERROR: 'Vui lòng nhập đủ tên đăng nhập và mật khẩu.',
+    NETWORK_ERROR: 'Không kết nối được tới máy chủ API.'
   };
 
   function showError(msg) {
@@ -71,7 +69,6 @@
   form.addEventListener('submit', async function (ev) {
     ev.preventDefault();
     clearError();
-    badge.hidden = true;
 
     var username = userEl.value.trim();
     var password = passEl.value;
@@ -91,8 +88,7 @@
         location.replace('app.html');
         return;
       }
-      showError(ERROR_TEXT[r.code] || 'Không đăng nhập được, vui lòng thử lại.');
-      if (r.mock) badge.hidden = false;
+      showError(ERROR_TEXT[r.code] || r.message || 'Không đăng nhập được, vui lòng thử lại.');
     } catch (e) {
       showError('Không đăng nhập được, vui lòng thử lại.');
     } finally {
