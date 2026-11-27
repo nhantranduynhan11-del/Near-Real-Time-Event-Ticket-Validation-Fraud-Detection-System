@@ -8,8 +8,8 @@
 |---|---|
 | CSDL | SQL Server 2022 (`mcr.microsoft.com/mssql/server:2022-latest`) chạy trong Docker trên WSL2 |
 | Dữ liệu | 5.000 vé tải (tiền tố `LT`, cộng 7 vé seed = 5.007 dòng `ticket`), 300.000 dòng `scan_event`, 295.750 dòng `gold_alert` |
-| Sinh dữ liệu | `database/generate_load_data.sql`, chạy thật, mất 21,8 giây. Kết quả: `docs/load_data_output.txt` |
-| Kiểm tra toàn vẹn | `database/check.sql` trả **0 dòng lỗi** ở cả 8 câu kiểm tra (gồm đối chiếu Gold với Silver). Kết quả: `docs/check_output.txt` |
+| Sinh dữ liệu | `database/generate_load_data.sql`, chạy thật, mất 21,8 giây |
+| Kiểm tra toàn vẹn | `database/check.sql` trả **0 dòng lỗi** ở cả 8 câu kiểm tra (gồm đối chiếu Gold với Silver) |
 | Khung giờ | Mọi lượt quét tải nằm trong 18:00–20:00; dòng "scan_event ngoai khung gio" bằng **0** |
 | Điều kiện đo | Spark đã dừng, không có tải khác. Mỗi truy vấn chạy 2 lượt: lượt 1 xóa cache (`DBCC DROPCLEANBUFFERS`), lượt 2 cache nóng |
 | Công cụ | `SET STATISTICS IO, TIME ON`; script `database/measure_indexes.sql` |
@@ -53,13 +53,11 @@ Logical reads cộng tất cả bảng của truy vấn đó nằm trong cột L
 Ghi chú:
 - Q2 cộng ba câu: đếm lượt quét, lượt VALID đầu tiên, lượt quét mới nhất.
 - Q6b: số liệu cộng của ba câu `INSERT` bên trong thủ tục (`gold_gate_stats`, `gold_event_stats`, `gold_alert`); thời gian là của cả thủ tục.
-- Kết quả đầy đủ: `docs/measure_before.txt`, `docs/measure_after.txt`.
 
 ### Kế hoạch thực thi
 
-Kế hoạch thực tế (Actual Execution Plan) chụp từ SQL Server Management Studio bằng `database/plans_gui.sql`, trước và sau khi tạo index.
+Kế hoạch thực tế (Actual Execution Plan) chụp từ SQL Server Management Studio, trước và sau khi tạo index.
 Mỗi ảnh có câu truy vấn, sơ đồ kế hoạch và khung chú thích của toán tử truy cập dữ liệu (tên đối tượng, điều kiện, số dòng đã đọc).
-Bản dạng chữ (`SET SHOWPLAN_TEXT`): `docs/plans_before.txt`, `docs/plans_after.txt`.
 
 | Truy vấn | Trước (chỉ có khóa chính) | Sau (đủ năm index) |
 |---|---|---|
@@ -127,7 +125,7 @@ Tạo bằng `database/indexes_experiment.sql`, đo lại bằng cùng script. N
 | **X1** `MAX(processing_ts) ... WHERE gate_id = 'GATE_A'` | `IX_exp_scan_event_gate` trên `scan_event(gate_id)` (11,13 MB) | 13.485 → 13.485 (không đổi) | 51/21 → 51/23 | Không: số trang đọc vẫn bằng quét cả bảng, scan count 17 |
 | **X2** đếm `app_user` theo `role` | `IX_exp_app_user_role` trên `app_user(role)` (0,02 MB) | 2 → 2 (không đổi) | 1/0 → 0/0 | Không có lợi ích đo được (cả bảng chỉ 2 trang) |
 
-Số "không có" lấy từ `docs/measure_after.txt`, số "có" lấy từ `docs/measure_experiment.txt`. Kết luận: cả hai index **không làm giảm một trang nào**; chênh lệch vài mili giây (51/21 → 51/23 ms; 1/0 → 0/0 ms) là dao động đo, không phải cải thiện.
+Kết luận: cả hai index **không làm giảm một trang nào**; chênh lệch vài mili giây (51/21 → 51/23 ms; 1/0 → 0/0 ms) là dao động đo, không phải cải thiện.
 
 Lý do hai index này không đáng giữ:
 
@@ -162,18 +160,18 @@ runsql() {
 }
 
 # 1. Sinh 300.000 dòng và kiểm tra (nếu báo đã có dữ liệu tải: runsql database/delete_load_data.sql trước)
-runsql database/generate_load_data.sql | tee docs/load_data_output.txt
-runsql database/check.sql | tee docs/check_output.txt          # phải 0 dòng lỗi
+runsql database/generate_load_data.sql
+runsql database/check.sql          # phải 0 dòng lỗi
 
 # 2. Đo trước (không index) và sau (có index)
 runsql database/indexes_drop.sql
-runsql database/measure_indexes.sql | tee docs/measure_before.txt
+runsql database/measure_indexes.sql
 runsql database/indexes.sql
-runsql database/measure_indexes.sql | tee docs/measure_after.txt
+runsql database/measure_indexes.sql
 
 # 3. Đo hai index thử nghiệm, rồi trả DB về trạng thái chính thức
 runsql database/indexes_experiment.sql
-runsql database/measure_indexes.sql | tee docs/measure_experiment.txt
+runsql database/measure_indexes.sql
 runsql database/indexes_drop.sql
 runsql database/indexes.sql
 ```
