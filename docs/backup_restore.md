@@ -12,10 +12,11 @@ Tài liệu này mô tả cơ chế, hướng dẫn thực hiện từng bước
 - **Cơ chế an toàn dữ liệu:**
   - Sao lưu sử dụng `WITH FORMAT, INIT, COMPRESSION, CHECKSUM` và tự động chạy `RESTORE VERIFYONLY ... WITH CHECKSUM` ngay sau khi ghi xong để kiểm tra tính toàn vẹn.
   - Khôi phục tự động xác thực lại tệp `.bak` trước khi chuyển database sang chế độ `SINGLE_USER WITH ROLLBACK IMMEDIATE`, thực hiện `RESTORE DATABASE ... WITH REPLACE, RECOVERY` và khôi phục lại chế độ `MULTI_USER` (kể cả khi xảy ra lỗi trong khối `TRY...CATCH`).
+- **Phạm vi sao lưu:** chỉ gồm database SQL Server `ticket_system`. Các tệp Parquet của tầng Bronze và dữ liệu trong Kafka nằm ngoài phạm vi của quy trình này.
 - **Các script tự động hóa:**
   - `scripts/backup_db.sh`: Sao lưu toàn bộ database ra tệp `.bak`.
   - `scripts/restore_db.sh`: Khôi phục database từ một tệp `.bak` chỉ định hoặc tệp mới nhất.
-  - `scripts/demo_backup_restore.sh`: Chạy khép kín quy trình đếm dòng $\rightarrow$ sao lưu $\rightarrow$ giả lập sự cố $\rightarrow$ khôi phục $\rightarrow$ đối chiếu lại toàn bộ 12 bảng và xuất log.
+  - `scripts/demo_backup_restore.sh`: Chạy khép kín quy trình đếm dòng → sao lưu → giả lập sự cố → khôi phục → đối chiếu lại toàn bộ 12 bảng và xuất log.
 
 ---
 
@@ -26,7 +27,7 @@ Tài liệu này mô tả cơ chế, hướng dẫn thực hiện từng bước
    ```bash
    ./scripts/up.sh full
    ```
-2. Tệp biến môi trường `docker/.env` đã tồn tại và chứa `MSSQL_SA_PASSWORD`.
+2. Tệp `docker/.env` đã tồn tại và có `DB_PASSWORD`. Compose gán giá trị này cho biến `MSSQL_SA_PASSWORD` bên trong container; các script đọc mật khẩu từ trong container nên không cần khai báo `MSSQL_SA_PASSWORD` trong `.env`.
    > **Lưu ý kỹ thuật:** Các lệnh `docker compose exec` trong 3 script đều đã truyền tường minh `COMPOSE_PROFILES=full` và `--env-file docker/.env` (đồng bộ với `scripts/run_test_cases.sh`) để tránh lỗi không tìm thấy service `sqlserver`.
 3. Các script đã được cấp quyền thực thi:
    ```bash
@@ -67,12 +68,17 @@ Chạy từ thư mục gốc của dự án:
 ./scripts/restore_db.sh ticket_system_truoc_nang_cap.bak
 ```
 
-**Bước bắt buộc sau khi khôi phục:** Vì quá trình khôi phục chuyển database sang `SINGLE_USER WITH ROLLBACK IMMEDIATE`, các kết nối cũ từ API và Spark Streaming sẽ bị ngắt. Cần khởi động lại các dịch vụ ứng dụng để thiết lập kết nối mới (hoặc chạy lại `./scripts/up.sh full`).
+**Bước bắt buộc sau khi khôi phục:** Vì quá trình khôi phục chuyển database sang `SINGLE_USER WITH ROLLBACK IMMEDIATE`, các kết nối cũ từ API và Spark Streaming sẽ bị ngắt. Cần khởi động lại các dịch vụ ứng dụng để thiết lập kết nối mới:
+```bash
+docker restart docker-api-1
+kill "$(cat .spark.pid)"      # dừng Spark đang giữ kết nối cũ
+./scripts/up.sh full          # bật lại Spark (các container khác đã chạy sẵn)
+```
 
-### 3.3. Chạy kiểm thử tự động toàn quy trình (Sao lưu $\rightarrow$ Sự cố $\rightarrow$ Khôi phục)
+### 3.3. Chạy kiểm thử tự động toàn quy trình (Sao lưu → Sự cố → Khôi phục)
 Để kiểm chứng trên tập dữ liệu 300.000 dòng:
 
-1. **(Tùy chọn) Sinh dữ liệu tải 300.000 lượt quét nếu DB chưa có:**
+1. **(Tùy chọn) Sinh dữ liệu tải 300.000 lượt quét nếu DB chưa có** (nếu đã có dữ liệu tải từ trước, chạy `database/delete_load_data.sql` trước để tránh nạp trùng):
    ```bash
    COMPOSE_PROFILES=full docker compose -f docker/docker-compose.yml --env-file docker/.env \
      exec -T sqlserver bash -c \
@@ -97,6 +103,8 @@ Chạy từ thư mục gốc của dự án:
 
 Thử nghiệm được thực hiện vào ngày **26/11/2026** trên máy `DESKTOP-3Q8JVD0` sau khi đã nạp đầy đủ bộ dữ liệu từ `database/generate_load_data.sql`.
 
+> Kết quả dưới đây thuộc kịch bản `DISASTER=delete` (xóa sạch dữ liệu 12 bảng). Kịch bản `DISASTER=drop` (xóa hẳn database) có trong script nhưng chưa được ghi lại trong báo cáo này.
+
 ### 4.1. Quy mô dữ liệu và thời gian thực thi
 
 | Hạng mục đo | Kết quả thực tế | Ghi chú |
@@ -105,7 +113,7 @@ Thử nghiệm được thực hiện vào ngày **26/11/2026** trên máy `DESK
 | Tổng số dòng toàn DB (12 bảng) | **896.664 dòng** | Gồm 295.750 `fraud_alert`, 295.750 `gold_alert`, 5.007 `ticket`, ... |
 | Tổng số trang dữ liệu SQL Server | **32.282 pages** | 32.280 pages dữ liệu + 2 pages transaction log |
 | Dung lượng tệp `.bak` (đã nén) | **84,57 MB** | Bật tùy chọn `COMPRESSION` |
-| Thời gian ghi sao lưu (SQL Server) | **0,453 giây** | Tốc độ 556,731 MB/giây |
+| Thời gian ghi sao lưu (SQL Server) | **0,453 giây** | Tốc độ 556,731 MB/giây (tính trên dung lượng trang dữ liệu chưa nén) |
 | Thời gian sao lưu tổng (`backup_db.sh`) | **1,979 giây** | Bao gồm `RESTORE VERIFYONLY WITH CHECKSUM` |
 | Thời gian bước 2 trong demo | **2,022 giây** | Tổng thời gian gọi script từ `demo_backup_restore.sh` |
 | Thời gian nạp khôi phục (SQL Server) | **0,652 giây** | Tốc độ 386,808 MB/giây |
