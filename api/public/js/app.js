@@ -1,12 +1,4 @@
-/* =====================================================================
-   app.js — Khung giao diện sau đăng nhập (Phase 6 · Role D).
-
-   - Bảo vệ phiên: không có phiên hợp lệ thì quay về trang đăng nhập.
-   - Điều hướng theo vai trò (file 15 mục 0): GATE_OPERATOR chỉ thấy
-     "Quét vé"; EVENT_SUPERVISOR thấy "Quản trị vé" và "In vé".
-   - Bộ định tuyến theo location.hash: #scan, #tickets, #print.
-   - Các nhãn/tiện ích dùng chung đặt trong window.TicketUI.
-   ===================================================================== */
+// Khung điều hướng theo vai trò và các hàm dùng chung trên giao diện
 (function (global) {
   'use strict';
 
@@ -15,13 +7,10 @@
 
   var role = (session.user && session.user.role) || '';
 
-  /* ------------------- Tiện ích dùng chung ------------------- */
   var TicketUI = {};
 
-  // fetch có gắn token + tự quay về đăng nhập khi 401.
   TicketUI.authFetch = TicketAuth.apiFetch;
 
-  // Kết quả quét (file 07) — màu và chữ dễ phân biệt (Role D, 10/11).
   TicketUI.SCAN_RESULTS = {
     VALID:      { label: 'Cho vào',  detail: 'Vé hợp lệ',       cls: 'ok' },
     INVALID:    { label: 'Từ chối',  detail: 'Vé không hợp lệ',  cls: 'deny' },
@@ -31,7 +20,6 @@
     WRONG_GATE: { label: 'Từ chối',  detail: 'Sai cổng',         cls: 'warn' }
   };
 
-  // Mã cảnh báo (file 07 / UC02 / D1).
   TicketUI.ALERT_CODES = {
     INVALID_QR:         'Mã QR sai chữ ký hoặc không hợp lệ',
     DUPLICATE_SCAN:     'Vé đã vào rồi',
@@ -41,7 +29,6 @@
     WRONG_GATE_FRAUD:   'Cố tình dò nhiều cổng'
   };
 
-  // Trạng thái vé (file 06).
   TicketUI.TICKET_STATUSES = {
     UNUSED:        'Chưa dùng',
     VALID_ENTRY:   'Đã vào',
@@ -70,7 +57,7 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   };
 
-  // Giờ hiện tại ở Việt Nam (UTC+7, không DST), định dạng ISO 8601 kèm offset.
+  // Cộng 7 tiếng để tạo chuỗi ISO 8601 theo giờ Việt Nam có đuôi +07:00
   TicketUI.nowVietnamISO = function () {
     return new Date(Date.now() + 7 * 3600 * 1000).toISOString().replace('Z', '+07:00');
   };
@@ -82,21 +69,18 @@
     return d.toLocaleString('vi-VN');
   };
 
-  // Đổi mili giây sang số giây dễ đọc cho nhân viên tại cổng (D1).
   TicketUI.formatSeconds = function (ms) {
     if (ms == null || isNaN(Number(ms))) return null;
     var sec = Math.max(0, Math.round(Number(ms) / 1000));
     return sec + ' giây';
   };
 
-  // Đổi tỷ lệ 0..1 sang phần trăm (file 15 mục 0: 0.0174 → 1,74%).
   TicketUI.formatRate = function (rate) {
     var n = Number(rate);
     if (rate == null || isNaN(n)) return '0,00%';
     return (n * 100).toFixed(2).replace('.', ',') + '%';
   };
 
-  // Đọc lỗi chuẩn { error: { code, message, details } } (file 15).
   TicketUI.readError = async function (res) {
     var data = null;
     try { data = await res.json(); } catch (e) { data = null; }
@@ -115,11 +99,9 @@
 
   global.TicketUI = TicketUI;
 
-  /* ------------------- Đăng ký view ------------------- */
   var views = {};
   TicketUI.register = function (name, def) { views[name] = def; };
 
-  /* ------------------- Điều hướng ------------------- */
   var NAV = [];
   if (role === 'GATE_OPERATOR') {
     NAV = [{ hash: 'scan', label: 'Quét vé' }];
@@ -158,8 +140,9 @@
     }
     if (!view) return;
 
+    // Dọn timer hoặc camera của tab trước khi chuyển sang tab mới
     if (activeView && typeof activeView.unmount === 'function') {
-      try { activeView.unmount(); } catch (e) { /* bỏ qua */ }
+      try { activeView.unmount(); } catch (e) {}
     }
     activeView = view;
 
@@ -170,7 +153,6 @@
 
   window.addEventListener('hashchange', route);
 
-  /* ------------------- Thanh trên cùng ------------------- */
   var who = document.getElementById('who');
   who.textContent = TicketAuth.displayName(session) + (role ? ' · ' + role : '');
 
@@ -179,11 +161,9 @@
     location.replace('index.html');
   });
 
-  // Kiểm tra phiên định kỳ: token hết hạn thì quay về trang đăng nhập.
   setInterval(function () {
     if (!TicketAuth.hasValidSession()) TicketAuth.redirectToLogin();
   }, 5000);
 
-  // Chờ tất cả script view (scan/tickets/print) đăng ký xong rồi mới điều hướng.
   window.addEventListener('DOMContentLoaded', route);
 })(window);
