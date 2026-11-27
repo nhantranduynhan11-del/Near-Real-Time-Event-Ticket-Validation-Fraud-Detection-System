@@ -3,7 +3,7 @@
 Báo cáo kiểm thử bốn quy tắc gian lận R1–R4 (`Requirements/09_Fraud_Rules.md`) theo 8 ca ở
 `Requirements/10_Test_Cases.md`.
 
-
+> **Môi trường chạy TC01–TC08: Ubuntu 26.04.1 LTS trên WSL2 (kernel 6.18.58.1-microsoft-standard-WSL2), WSL được cấp 15 GB RAM và 16 CPU logical; SQL Server 2022 (16.0 RTM) chạy trong Docker
 ## 1. Kết quả tổng hợp
 
 Tổng: 8 ca, **8 đạt**. TC08 không đạt ở lần chạy đầu do lỗi tính giờ của script (không phải lỗi luật R4); sau khi sửa script và chạy lại thì đạt (xem mục 3).
