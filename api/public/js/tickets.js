@@ -1,32 +1,8 @@
-/* =====================================================================
-   tickets.js — Trang quản trị vé (Phase 6 · Role D · 12/11).
-
-   UC04 + file 15 mục 3:
-   - Danh sách vé (GET /api/tickets), tìm kiếm + lọc trạng thái, phân trang.
-   - Thêm vé (POST /api/tickets), sửa cổng (PUT /api/tickets/:id),
-     xóa (DELETE /api/tickets/:id), thu hồi (POST /api/tickets/:id/cancel).
-   - Xem lịch sử quét của một vé (GET /api/tickets/:id).
-   ===================================================================== */
+// Màn hình quản trị danh sách vé và tra cứu lịch sử quét cho EVENT_SUPERVISOR
 (function () {
   'use strict';
 
   var T = window.TicketUI;
-
-  var MOCK_TICKETS = [
-    { ticket_id: 'TK001', event_id: 'EV001', assigned_gate_id: 'GATE_A', ticket_status: 'FLAGGED_FRAUD' },
-    { ticket_id: 'TK002', event_id: 'EV001', assigned_gate_id: 'GATE_B', ticket_status: 'VALID_ENTRY' },
-    { ticket_id: 'TK003', event_id: 'EV001', assigned_gate_id: 'GATE_C', ticket_status: 'CANCELLED' },
-    { ticket_id: 'TK004', event_id: 'EV001', assigned_gate_id: 'GATE_B', ticket_status: 'UNUSED' },
-    { ticket_id: 'TK005', event_id: 'EV002', assigned_gate_id: 'GATE_E2', ticket_status: 'UNUSED' },
-    { ticket_id: 'TK006', event_id: 'EV001', assigned_gate_id: 'GATE_A', ticket_status: 'UNUSED' },
-    { ticket_id: 'TK007', event_id: 'EV001', assigned_gate_id: 'GATE_C', ticket_status: 'UNUSED' }
-  ];
-
-  function isMockSession() {
-    var s = window.TicketAuth && TicketAuth.getSession && TicketAuth.getSession();
-    return !!(s && typeof s.access_token === 'string' &&
-      s.access_token.indexOf('.bW9jay1zaWduYXR1cmU') !== -1);
-  }
 
   T.register('tickets', {
     title: 'Quản trị vé',
@@ -104,7 +80,6 @@
         '</div>' +
       '</div>';
 
-    // ----- Tham chiếu DOM -----
     var qInput = root.querySelector('#tk-q');
     var statusSel = root.querySelector('#tk-status');
     var searchBtn = root.querySelector('#tk-search');
@@ -136,7 +111,6 @@
     function showListError(msg) { errEl.textContent = msg; errEl.hidden = false; }
     function clearListError() { errEl.textContent = ''; errEl.hidden = true; }
 
-    /* ---------- Nạp dữ liệu nền (cổng + sự kiện) ---------- */
     async function loadMeta() {
       try {
         var gRes = await T.authFetch('/api/gates');
@@ -162,9 +136,7 @@
           o.textContent = e.event_id + ' · ' + (e.event_name || '');
           addEvent.appendChild(o);
         });
-      } catch (e) {
-        /* không chặn danh sách vé nếu meta lỗi */
-      }
+      } catch (e) {}
     }
 
     function gateOptionsForEvent(eventId, selected) {
@@ -179,7 +151,6 @@
       }).join('');
     }
 
-    /* ---------- Danh sách vé ---------- */
     async function loadTickets() {
       clearListError();
       rowsEl.innerHTML = '<tr><td colspan="5" class="empty">Đang tải…</td></tr>';
@@ -205,18 +176,6 @@
         renderRows(data.items || []);
         renderPager();
       } catch (e) {
-        if (isMockSession()) {
-          var filtered = MOCK_TICKETS.filter(function (t) {
-            if (state.q && t.ticket_id.indexOf(state.q.toUpperCase()) !== 0) return false;
-            if (state.status && t.ticket_status !== state.status) return false;
-            return true;
-          });
-          state.total = filtered.length;
-          state.pages = 1;
-          renderRows(filtered);
-          renderPager();
-          return;
-        }
         showListError('Không tải được danh sách vé: ' + (e && e.message ? e.message : e));
         rowsEl.innerHTML = '';
       }
@@ -257,7 +216,6 @@
       nextBtn.disabled = state.page >= state.pages;
     }
 
-    /* ---------- Thêm vé ---------- */
     function resetAddForm() {
       addId.value = '';
       addEvent.selectedIndex = 0;
@@ -312,7 +270,6 @@
       }
     });
 
-    /* ---------- Sửa (đổi cổng) ---------- */
     function openEdit(t) {
       modalTitle.textContent = 'Sửa cổng của ' + t.ticket_id;
       modalBody.innerHTML =
@@ -350,7 +307,6 @@
       modalOk.onclick = onOk;
     }
 
-    /* ---------- Thu hồi ---------- */
     async function doCancel(t) {
       if (!window.confirm('Thu hồi vé ' + t.ticket_id + '? Vé sẽ thành CANCELLED (chỉ khi đang UNUSED).')) return;
       try {
@@ -359,7 +315,6 @@
         });
         if (res.ok) {
           await loadTickets();
-          // Làm mới chi tiết nếu đang xem vé này.
           if (!detailEl.hidden && detailEl.dataset.ticketId === t.ticket_id) {
             showDetail(t);
           }
@@ -372,7 +327,6 @@
       }
     }
 
-    /* ---------- Xóa ---------- */
     async function doDelete(t) {
       if (!window.confirm('Xóa vé ' + t.ticket_id + '? Vé đã có lượt quét thì sẽ bị từ chối (409).')) return;
       try {
@@ -391,7 +345,6 @@
       }
     }
 
-    /* ---------- Chi tiết + lịch sử quét ---------- */
     async function showDetail(t) {
       detailEl.hidden = false;
       detailEl.dataset.ticketId = t.ticket_id;
@@ -408,20 +361,6 @@
         var d = await res.json();
         renderDetail(d);
       } catch (e) {
-        if (isMockSession()) {
-          renderDetail({
-            ticket_id: t.ticket_id,
-            event_id: t.event_id,
-            assigned_gate_id: t.assigned_gate_id,
-            ticket_status: t.ticket_status,
-            scan_count: t.ticket_id === 'TK001' ? 2 : 0,
-            scans: t.ticket_id === 'TK001' ? [
-              { received_at: '2026-12-12T19:00:01.000+07:00', gate_id: 'GATE_A', scan_result: 'VALID', alert_level: 'NONE', alert_code: null },
-              { received_at: '2026-12-12T19:00:04.000+07:00', gate_id: 'GATE_D', scan_result: 'USED', alert_level: 'FRAUD', alert_code: 'IMPOSSIBLE_TRAVEL', previous_scan_gate_id: 'GATE_A', time_since_previous_scan_ms: 3000 }
-            ] : []
-          });
-          return;
-        }
         detailEl.innerHTML = '<p class="form-error">Không tải được chi tiết vé: ' +
           T.escapeHtml(e && e.message ? e.message : e) + '</p>';
       }
@@ -432,7 +371,7 @@
       var scanRows = scans.map(function (s) {
         var alert = (s.alert_level && s.alert_level !== 'NONE')
           ? '<div class="mini"><b>' + T.escapeHtml(s.alert_level) + '</b>' +
-            (s.alert_code ? ' · <code>' + T.escapeHtml(s.alert_code) + '</code> — ' +
+            (s.alert_code ? ' · <code>' + T.escapeHtml(s.alert_code) + '</code>: ' +
               T.escapeHtml(T.ALERT_CODES[s.alert_code] || '') : '') + '</div>'
           : '';
         var usedInfo = (s.scan_result === 'USED' && (s.previous_scan_gate_id || s.time_since_previous_scan_ms != null))
@@ -471,12 +410,10 @@
       return { VALID: 'ok-text', WRONG_GATE: 'warn-text' }[r] || 'deny-text';
     }
 
-    /* ---------- Modal ---------- */
     function closeModal() { modal.hidden = true; }
     modalCancel.addEventListener('click', closeModal);
     modal.addEventListener('click', function (ev) { if (ev.target === modal) closeModal(); });
 
-    /* ---------- Tìm kiếm / phân trang ---------- */
     searchBtn.addEventListener('click', function () {
       state.q = qInput.value.trim();
       state.status = statusSel.value;
