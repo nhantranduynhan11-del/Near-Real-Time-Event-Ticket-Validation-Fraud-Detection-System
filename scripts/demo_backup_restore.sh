@@ -42,7 +42,9 @@ count_rows() { # in "bảng|số_dòng", đã sắp xếp
     <<<"$sql" | grep '|' | sort
 }
 
-ms_since() { echo $(( $(date +%s%3N) - $1 )); }
+# Mili giây từ epoch. Dùng %N (nano giây) rồi chia, vì một số bản `date` (uutils) không hiểu %3N.
+now_ms() { echo $(( $(date +%s%N) / 1000000 )); }
+ms_since() { echo $(( $(now_ms) - $1 )); }
 fmt_ms() { printf '%d.%03d giây' $(($1 / 1000)) $(($1 % 1000)); }
 
 if [[ ${1:-} != --yes ]]; then
@@ -65,7 +67,7 @@ tr '|' ' ' < "$TMP/before.txt" | awk '{printf "  %-20s %10s\n", $1, $2; total +=
 
 log ""
 log "Bước 2. Sao lưu"
-t0=$(date +%s%3N)
+t0=$(now_ms)
 bash "$ROOT/scripts/backup_db.sh" "$BACKUP" | tee -a "$LOG"
 backup_ms=$(ms_since "$t0")
 
@@ -105,7 +107,7 @@ fi
 
 log ""
 log "Bước 4. Khôi phục"
-t0=$(date +%s%3N)
+t0=$(now_ms)
 bash "$ROOT/scripts/restore_db.sh" "$BACKUP" | tee -a "$LOG"
 restore_ms=$(ms_since "$t0")
 
