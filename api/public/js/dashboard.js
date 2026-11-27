@@ -1,19 +1,4 @@
-/* =====================================================================
-   dashboard.js — Trang Dashboard giám sát trực tiếp (Phase 7 · Role D · D2).
-
-   UC03 / F07 + file 14 mục 2.1 + file 15 mục 1.1:
-   - Chỉ dành cho vai trò EVENT_SUPERVISOR.
-   - Tự gọi GET /api/dashboard/live mỗi 1 giây (polling tuần tự, không chồng).
-   - Hiển thị:
-     + Tổng lượt quét và số lượng theo từng kết quả (6 loại scan_result).
-     + Tỷ lệ gian lận (chỉ tính mức FRAUD = fraud_count / total_scans).
-     + Biểu đồ theo cổng bằng Chart.js (vendor/chart.umd.js trong repo) + bảng chi tiết cổng.
-     + Danh sách cảnh báo mới nhất: cổng, mức, mã cảnh báo, vé, chi tiết, giờ.
-     + Thời điểm cập nhật gần nhất (Gold updated_at & thời điểm đồng bộ).
-     + Báo rõ khi mất kết nối với API và giữ nguyên số liệu gần nhất (UC03).
-   - Khi API /api/dashboard/live của Role C (C2) chưa sẵn sàng (404 NOT_FOUND):
-     tự động dùng dữ liệu giả đúng cấu trúc file 15 mục 1.1.
-   ===================================================================== */
+// Màn hình giám sát trực tiếp cho EVENT_SUPERVISOR, hỏi dữ liệu mỗi giây từ /api/dashboard/live
 (function () {
   'use strict';
 
@@ -31,190 +16,6 @@
     EXPIRED:    { label: 'Quá giờ nhận khách', cls: 'res-expired' }
   };
 
-  // Dữ liệu giả đúng chuẩn file 15 mục 1.1 (dùng khi C2 chưa ghép route).
-  function getMockLiveData() {
-    var nowIso = T.nowVietnamISO();
-    return {
-      generated_at: nowIso,
-      event: {
-        event_id: 'EV001',
-        event_name: 'Concert Demo',
-        admission_start: '2026-12-12T18:00:00.000+07:00',
-        admission_end: '2026-12-12T20:00:00.000+07:00',
-        gate_count: 4
-      },
-      totals: {
-        total_scans: 1150,
-        fraud_count: 20,
-        warning_count: 28,
-        fraud_rate: 0.0174,
-        by_result: {
-          VALID: 1100,
-          INVALID: 6,
-          USED: 9,
-          CANCELLED: 3,
-          EXPIRED: 2,
-          WRONG_GATE: 30
-        },
-        updated_at: '2026-12-12T19:30:02.000+07:00'
-      },
-      gates: [
-        {
-          gate_id: 'GATE_A',
-          gate_name: 'Cổng A',
-          total_scans: 300,
-          valid_entries: 286,
-          rejected_scans: 14,
-          fraud_count: 5,
-          warning_count: 8,
-          fraud_rate: 0.0167,
-          last_scan_at: '2026-12-12T19:30:01.874+07:00',
-          updated_at: '2026-12-12T19:30:02.000+07:00'
-        },
-        {
-          gate_id: 'GATE_B',
-          gate_name: 'Cổng B',
-          total_scans: 320,
-          valid_entries: 308,
-          rejected_scans: 12,
-          fraud_count: 4,
-          warning_count: 7,
-          fraud_rate: 0.0125,
-          last_scan_at: '2026-12-12T19:30:00.510+07:00',
-          updated_at: '2026-12-12T19:30:02.000+07:00'
-        },
-        {
-          gate_id: 'GATE_C',
-          gate_name: 'Cổng C',
-          total_scans: 280,
-          valid_entries: 268,
-          rejected_scans: 12,
-          fraud_count: 5,
-          warning_count: 7,
-          fraud_rate: 0.0179,
-          last_scan_at: '2026-12-12T19:29:58.200+07:00',
-          updated_at: '2026-12-12T19:30:02.000+07:00'
-        },
-        {
-          gate_id: 'GATE_D',
-          gate_name: 'Cổng D',
-          total_scans: 250,
-          valid_entries: 238,
-          rejected_scans: 12,
-          fraud_count: 6,
-          warning_count: 6,
-          fraud_rate: 0.024,
-          last_scan_at: '2026-12-12T19:30:01.900+07:00',
-          updated_at: '2026-12-12T19:30:02.000+07:00'
-        }
-      ],
-      latest_alerts: [
-        {
-          scan_event_id: '6f1c2d1e-3b8a-4c55-9a1e-0d4c7e2b9f10',
-          created_at: '2026-12-12T19:30:01.900+07:00',
-          received_at: '2026-12-12T19:30:01.874+07:00',
-          alert_level: 'FRAUD',
-          alert_code: 'IMPOSSIBLE_TRAVEL',
-          scan_result: 'USED',
-          ticket_id: 'TK001',
-          gate_id: 'GATE_D',
-          scanner_id: 'SC_D1',
-          previous_scan_gate_id: 'GATE_A',
-          time_since_previous_scan_ms: 3000,
-          min_travel_time_ms: 140000,
-          ticket_assigned_gate_id: null,
-          distinct_wrong_gate_count: null,
-          raw_qr_preview: null
-        },
-        {
-          scan_event_id: '4a9b8c7d-2e1f-4a33-8b2c-1f5e6d7c8a90',
-          created_at: '2026-12-12T19:29:45.120+07:00',
-          received_at: '2026-12-12T19:29:45.100+07:00',
-          alert_level: 'FRAUD',
-          alert_code: 'DUPLICATE_SCAN',
-          scan_result: 'USED',
-          ticket_id: 'TK002',
-          gate_id: 'GATE_B',
-          scanner_id: 'SC_B1',
-          previous_scan_gate_id: 'GATE_B',
-          time_since_previous_scan_ms: 1800000,
-          min_travel_time_ms: null,
-          ticket_assigned_gate_id: null,
-          distinct_wrong_gate_count: null,
-          raw_qr_preview: null
-        },
-        {
-          scan_event_id: '3c8d7e6f-1a2b-4c44-9d3e-2a4b6c8d0e12',
-          created_at: '2026-12-12T19:28:30.500+07:00',
-          received_at: '2026-12-12T19:28:30.480+07:00',
-          alert_level: 'WARNING',
-          alert_code: 'WRONG_GATE_WARNING',
-          scan_result: 'WRONG_GATE',
-          ticket_id: 'TK006',
-          gate_id: 'GATE_B',
-          scanner_id: 'SC_B1',
-          previous_scan_gate_id: null,
-          time_since_previous_scan_ms: null,
-          min_travel_time_ms: null,
-          ticket_assigned_gate_id: 'GATE_A',
-          distinct_wrong_gate_count: 1,
-          raw_qr_preview: null
-        },
-        {
-          scan_event_id: '2b7c6d5e-0f1a-4b55-8c4d-3b5c7d9e1f23',
-          created_at: '2026-12-12T19:25:10.220+07:00',
-          received_at: '2026-12-12T19:25:10.200+07:00',
-          alert_level: 'FRAUD',
-          alert_code: 'REVOKED_TICKET',
-          scan_result: 'CANCELLED',
-          ticket_id: 'TK003',
-          gate_id: 'GATE_C',
-          scanner_id: 'SC_C1',
-          previous_scan_gate_id: null,
-          time_since_previous_scan_ms: null,
-          min_travel_time_ms: null,
-          ticket_assigned_gate_id: null,
-          distinct_wrong_gate_count: null,
-          raw_qr_preview: null
-        },
-        {
-          scan_event_id: '1a6b5c4d-9e0f-4a66-9b5e-4c6d8e0f2a34',
-          created_at: '2026-12-12T19:20:05.050+07:00',
-          received_at: '2026-12-12T19:20:05.020+07:00',
-          alert_level: 'FRAUD',
-          alert_code: 'INVALID_QR',
-          scan_result: 'INVALID',
-          ticket_id: null,
-          gate_id: 'GATE_A',
-          scanner_id: 'SC_A1',
-          previous_scan_gate_id: null,
-          time_since_previous_scan_ms: null,
-          min_travel_time_ms: null,
-          ticket_assigned_gate_id: null,
-          distinct_wrong_gate_count: null,
-          raw_qr_preview: 'TK005.forged_hmac_sig_00'
-        },
-        {
-          scan_event_id: '0f5a4b3c-8d9e-4f77-8a6f-5d7e9f1a3b45',
-          created_at: '2026-12-12T19:18:12.800+07:00',
-          received_at: '2026-12-12T19:18:12.770+07:00',
-          alert_level: 'FRAUD',
-          alert_code: 'WRONG_GATE_FRAUD',
-          scan_result: 'WRONG_GATE',
-          ticket_id: 'TK007',
-          gate_id: 'GATE_D',
-          scanner_id: 'SC_D1',
-          previous_scan_gate_id: null,
-          time_since_previous_scan_ms: null,
-          min_travel_time_ms: null,
-          ticket_assigned_gate_id: 'GATE_C',
-          distinct_wrong_gate_count: 3,
-          raw_qr_preview: null
-        }
-      ]
-    };
-  }
-
   T.register('dashboard', {
     title: 'Dashboard',
     roles: ['EVENT_SUPERVISOR'],
@@ -228,8 +29,7 @@
   function mount(root) {
     root.innerHTML =
       '<div class="db-conn-banner" id="db-conn-banner" role="alert" hidden>' +
-        '<strong>Mất kết nối với API</strong> — Không lấy được dữ liệu mới từ <code>/api/dashboard/live</code>. ' +
-        'Màn hình đang giữ lại số liệu gần nhất đã tải.' +
+        '<strong>Mất kết nối với API</strong>: Không lấy được dữ liệu mới từ <code>/api/dashboard/live</code>.' +
       '</div>' +
 
       '<section class="card section db-header-card">' +
@@ -245,9 +45,6 @@
             '</div>' +
             '<div class="sub mini" id="db-updated-at" style="margin:4px 0 0">Cập nhật gần nhất: —</div>' +
           '</div>' +
-        '</div>' +
-        '<div class="mock-badge" id="db-mock-badge" hidden>' +
-          'Đang dùng dữ liệu giả theo file 15 mục 1.1 (API /api/dashboard/live chưa sẵn sàng)' +
         '</div>' +
       '</section>' +
 
@@ -324,7 +121,6 @@
     var connPill = root.querySelector('#db-conn-pill');
     var connText = root.querySelector('#db-conn-text');
     var updatedAtEl = root.querySelector('#db-updated-at');
-    var mockBadge = root.querySelector('#db-mock-badge');
     var eventTitleEl = root.querySelector('#db-event-title');
     var eventMetaEl = root.querySelector('#db-event-meta');
     var totalScansEl = root.querySelector('#db-total-scans');
@@ -344,7 +140,7 @@
     var lastGatesSig = '';
     var lastAlertsSig = '';
 
-    // Khởi tạo sẵn 6 ô kết quả để chỉ cập nhật số, tránh dựng lại DOM mỗi giây.
+    // Tạo sẵn 6 ô kết quả để mỗi chu kỳ chỉ gán lại textContent
     var resultValEls = {};
     byResultEl.innerHTML = RESULT_ORDER.map(function (code) {
       var m = RESULT_META[code] || { label: code, cls: '' };
@@ -362,7 +158,7 @@
       resultValEls[code] = byResultEl.querySelector('[data-res-code="' + code + '"]');
     });
 
-    // Khởi tạo biểu đồ Chart.js một lần duy nhất, tắt animation để không giật khi đo tải.
+    // Khởi tạo biểu đồ một lần và tắt animation để cập nhật liên tục không bị giật
     function initChart() {
       if (!window.Chart || !chartCanvas) return;
       var ctx = chartCanvas.getContext('2d');
@@ -415,23 +211,27 @@
       });
     }
 
-    function setConnectionState(connected, isMock, reason) {
+    function setConnectionState(connected, reason) {
       if (connected) {
         connBanner.hidden = true;
         connPill.className = 'db-conn-pill ok';
-        connText.textContent = isMock
-          ? 'Chế độ dữ liệu giả (1 giây/lần)'
-          : 'Đang kết nối trực tiếp (1 giây/lần)';
-        mockBadge.hidden = !isMock;
+        connText.textContent = 'Đang kết nối trực tiếp (1 giây/lần)';
       } else {
         connBanner.hidden = false;
-        if (reason) {
-          connBanner.innerHTML =
-            '<strong>Mất kết nối với API</strong> — ' + T.escapeHtml(reason) +
-            '. Màn hình đang giữ lại số liệu gần nhất đã tải.';
-        }
+        var suffix = hasRenderedData
+          ? '. Màn hình đang giữ lại số liệu gần nhất đã tải.'
+          : '. Chưa có dữ liệu từ máy chủ.';
+        connBanner.innerHTML =
+          '<strong>Mất kết nối với API</strong>: ' +
+          T.escapeHtml(reason || 'Không lấy được dữ liệu mới từ /api/dashboard/live') +
+          suffix;
         connPill.className = 'db-conn-pill down';
         connText.textContent = 'Mất kết nối với API';
+        if (!hasRenderedData) {
+          eventMetaEl.textContent = 'Không tải được dữ liệu sự kiện (mất kết nối với API).';
+          gatesRowsEl.innerHTML = '<tr><td colspan="7" class="empty">Chưa có dữ liệu cổng.</td></tr>';
+          alertsRowsEl.innerHTML = '<tr><td colspan="6" class="empty">Chưa có cảnh báo nào.</td></tr>';
+        }
       }
     }
 
@@ -480,10 +280,9 @@
       if (!data) return;
       hasRenderedData = true;
 
-      // 1. Thông tin sự kiện & thời gian cập nhật
       var ev = data.event || {};
       if (ev.event_id) {
-        eventTitleEl.textContent = 'Dashboard giám sát — ' + ev.event_id +
+        eventTitleEl.textContent = 'Dashboard giám sát - ' + ev.event_id +
           (ev.event_name ? ' · ' + ev.event_name : '');
         eventMetaEl.textContent =
           'Khung giờ nhận khách: ' + T.formatTime(ev.admission_start) +
@@ -496,13 +295,11 @@
       var genTime = data.generated_at ? formatShortTime(data.generated_at) : formatShortTime(T.nowVietnamISO());
       updatedAtEl.textContent = 'Cập nhật Gold: ' + goldTime + ' · Đồng bộ lúc: ' + genTime;
 
-      // 2. Các ô tổng quan (KPI)
       totalScansEl.textContent = Number(totals.total_scans || 0).toLocaleString('vi-VN');
       fraudRateEl.textContent = T.formatRate(totals.fraud_rate || 0);
       fraudCountEl.textContent = Number(totals.fraud_count || 0).toLocaleString('vi-VN');
       warningCountEl.textContent = Number(totals.warning_count || 0).toLocaleString('vi-VN');
 
-      // 3. Số lượng theo từng kết quả (6 giá trị scan_result)
       var byResult = totals.by_result || {};
       RESULT_ORDER.forEach(function (code) {
         if (resultValEls[code]) {
@@ -510,7 +307,7 @@
         }
       });
 
-      // 4. Biểu đồ theo cổng & bảng theo cổng
+      // Chỉ cập nhật lại biểu đồ và bảng cổng khi dữ liệu thực sự thay đổi
       var gates = Array.isArray(data.gates) ? data.gates : [];
       var gatesSig = gates.map(function (g) {
         return [
@@ -554,7 +351,6 @@
         }
       }
 
-      // 5. Danh sách cảnh báo mới nhất
       var alerts = Array.isArray(data.latest_alerts) ? data.latest_alerts : [];
       alertsCountEl.textContent = alerts.length + ' cảnh báo gần nhất';
       var alertsSig = alerts.map(function (a) { return a.scan_event_id; }).join('|');
@@ -605,31 +401,21 @@
 
         if (res.status === 200) {
           var liveData = await res.json();
-          setConnectionState(true, false);
+          setConnectionState(true);
           renderData(liveData);
           return;
         }
 
         var err = await T.readError(res);
-        // Nếu endpoint /api/dashboard/live chưa được C2 tạo (404 NOT_FOUND), dùng dữ liệu giả.
-        if (res.status === 404 && err.code !== 'EVENT_NOT_FOUND') {
-          setConnectionState(true, true);
-          renderData(getMockLiveData());
-          return;
-        }
-
-        // Lỗi 503 DASHBOARD_DATA_UNAVAILABLE hoặc lỗi khác: báo mất kết nối và giữ số liệu cũ.
-        if (!hasRenderedData) renderData(getMockLiveData());
-        setConnectionState(false, false, (err.code ? err.code + ': ' : '') + err.message);
+        setConnectionState(false, (err.code ? err.code + ': ' : '') + err.message);
       } catch (e) {
         if (!mounted) return;
         if (e && e.code === 'SESSION_EXPIRED') return;
-        // Mất kết nối mạng tới API: nếu chưa có số liệu nào thì nạp khung dữ liệu mẫu, rồi báo rõ mất kết nối.
-        if (!hasRenderedData) renderData(getMockLiveData());
-        setConnectionState(false, false, 'Không kết nối được tới máy chủ API');
+        setConnectionState(false, 'Không kết nối được tới máy chủ API');
       }
     }
 
+    // Đợi request trước trả về rồi mới hẹn 1 giây kế tiếp để tránh chồng request
     function scheduleNext() {
       if (!mounted) return;
       pollTimer = setTimeout(async function () {
@@ -645,7 +431,7 @@
         pollTimer = null;
       }
       if (gateChart) {
-        try { gateChart.destroy(); } catch (e) { /* bỏ qua */ }
+        try { gateChart.destroy(); } catch (e) {}
         gateChart = null;
       }
     };
