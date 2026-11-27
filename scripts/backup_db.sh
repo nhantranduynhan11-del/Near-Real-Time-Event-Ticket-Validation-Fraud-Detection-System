@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Sao lưu toàn bộ database vào database/backup/ (thư mục đã gắn ra ngoài container).
 # Dùng:  scripts/backup_db.sh [tên_tệp.bak]     mặc định: ticket_system_<ngày_giờ>.bak
-# Cần SQL Server đang chạy (docker compose --profile app up -d sqlserver).
+# Cần SQL Server đang chạy (./scripts/up.sh full).
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -33,14 +33,15 @@ if ! chmod 777 "$BACKUP_DIR" 2>/dev/null; then
   exit 1
 fi
 
-start=$(date +%s%3N)
+# Mili giây từ epoch. Dùng %N (nano giây) rồi chia, vì một số bản `date` (uutils) không hiểu %3N.
+start=$(( $(date +%s%N) / 1000000 ))
 sql_master <<SQL
 BACKUP DATABASE [$DB_NAME] TO DISK = N'$CONTAINER_DIR/$FILE' WITH FORMAT, INIT, COMPRESSION, CHECKSUM, STATS = 25;
 GO
 RESTORE VERIFYONLY FROM DISK = N'$CONTAINER_DIR/$FILE' WITH CHECKSUM;
 GO
 SQL
-end=$(date +%s%3N)
+end=$(( $(date +%s%N) / 1000000 ))
 
 ms=$((end - start))
 size=$(stat -c %s "$BACKUP_DIR/$FILE" 2>/dev/null || echo 0)
